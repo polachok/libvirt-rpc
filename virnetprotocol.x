@@ -236,3 +236,26 @@ struct virNetMessageError {
     int int2;
     virNetMessageNetwork net; /* unused */
 };
+
+
+/* from https://libvirt.org/git/?p=libvirt.git;a=blob_plain;f=src/remote/remote_protocol.x;hb=HEAD*/
+
+/* Length of long, but not unbounded, strings.
+ * This is an arbitrary limit designed to stop the decoder from trying
+ * to allocate unbounded amounts of memory when fed with a bad message.
+ */
+const REMOTE_STRING_MAX = 4194304;
+
+/* A long string, which may NOT be NULL. */
+typedef string remote_nonnull_string<REMOTE_STRING_MAX>;
+
+/* A long string, which may be NULL. */
+typedef remote_nonnull_string *remote_string;
+
+struct remote_connect_open_args {
+    /* NB. "name" might be NULL although in practice you can't
+     * yet do that using the remote_internal driver.
+     */
+    remote_string name;
+    unsigned int flags;
+};

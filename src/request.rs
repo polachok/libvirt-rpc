@@ -8,28 +8,10 @@ const ProcConnectOpen: i32 = 1;
 
 include!(concat!(env!("OUT_DIR"), "/virnetprotocol_xdr.rs"));
 
-#[derive(Debug)]
-struct AuthListPayload {
-    pub padding: [u8;3],
-    pub name: &'static str,
-    pub flags: u32,
-}
-
-impl<Out: xdr_codec::Write> Pack<Out> for AuthListPayload {
-    fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        let mut sz = 0;
-        sz += try!(xdr_codec::pack_opaque_array(&self.padding, 3, out));
-        sz += try!(self.name.pack(out));
-        sz += try!(self.flags.pack(out));
-        Ok(sz)
-    }
-}
-
 /// Auth list request must be the first request
 #[derive(Debug)]
 pub struct AuthListRequest {
     header: virNetMessageHeader,
-    payload: AuthListPayload,
 }
 
 impl AuthListRequest {
@@ -43,25 +25,15 @@ impl AuthListRequest {
             status: virNetMessageStatus::VIR_NET_OK,
         };
 
-        let payload = AuthListPayload {
-            padding: [1, 0, 0],
-            name: "qemu:///system",
-            flags: 0,
-        };
-
         AuthListRequest {
             header: header, 
-            payload: payload,
         }
     }
 }
 
 impl<Out: xdr_codec::Write> Pack<Out> for AuthListRequest {
     fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        let mut sz = 0;
-        sz += try!(self.header.pack(out));
-        sz += try!(self.payload.pack(out));
-        Ok(sz)
+        self.header.pack(out)
     }
 }
 
@@ -69,7 +41,7 @@ impl<Out: xdr_codec::Write> Pack<Out> for AuthListRequest {
 #[derive(Debug)]
 pub struct ConnectOpenRequest {
     header: virNetMessageHeader,
-    payload: AuthListPayload,
+    payload: remote_connect_open_args,
 }
 
 impl ConnectOpenRequest {
@@ -83,9 +55,8 @@ impl ConnectOpenRequest {
             status: virNetMessageStatus::VIR_NET_OK,
         };
 
-        let payload = AuthListPayload {
-            padding: [1, 0, 0],
-            name: "qemu:///system",
+        let payload = remote_connect_open_args {
+            name: Some(remote_nonnull_string("qemu:///system".to_string())),
             flags: 0,
         };
 
