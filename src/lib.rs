@@ -192,6 +192,15 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
 
         Ok((major as u32, minor as u32, micro as u32))
     }
+
+    pub fn list_defined_domains(&mut self) -> Result<Vec<String>, LibvirtError> {
+        let req = ListDefinedDomainsRequest::new(self.serial());
+
+        try!(self.write_packet(req));
+        let pkt: ListDefinedDomainsResponse = try!(self.read_packet_reply());
+        let names = pkt.get_domain_names();
+        Ok(names)
+    }
 }
 
 #[cfg(test)]
@@ -206,6 +215,8 @@ mod tests {
         libvirt.open().unwrap();
         let (major, minor, micro) = libvirt.version().unwrap();
         println!("version: {}.{}.{}", major, minor, micro);
+        let names = libvirt.list_defined_domains();
+        println!("domains: {:?}", names);
     }
     /*
     #[test]

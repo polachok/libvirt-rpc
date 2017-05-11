@@ -259,3 +259,14 @@ struct remote_connect_open_args {
     remote_string name;
     unsigned int flags;
 };
+
+/* Upper limit on lists of domains. */
+const REMOTE_DOMAIN_LIST_MAX = 16384;
+
+struct remote_connect_list_defined_domains_args {
+    int maxnames;
+};
+
+struct remote_connect_list_defined_domains_ret {
+    remote_nonnull_string names<REMOTE_DOMAIN_LIST_MAX>; /* insert@1 */
+};
