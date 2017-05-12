@@ -177,6 +177,7 @@ pub struct DomainDefineXMLRequest {
 
 impl DomainDefineXMLRequest {
     pub fn new(serial: u32, xml: &str, flags: u32) -> Self {
+        // XXX: use bitflags for flags
         let header = virNetMessageHeader {
             prog: 0x20008086,
             vers: 1,
@@ -207,9 +208,29 @@ pub struct DomainDefineXMLResponse {
     payload: remote_domain_define_xml_flags_ret,
 }
 
+impl DomainDefineXMLResponse {
+    pub fn get_domain(&self) -> Domain {
+        Domain (self.payload.dom.clone())
+    }
+}
+
 impl<In: xdr_codec::Read> Unpack<In> for DomainDefineXMLResponse {
     fn unpack(mut input: &mut In) -> xdr_codec::Result<(Self, usize)> {
         let (payload, len) = try!(remote_domain_define_xml_flags_ret::unpack(&mut input));
         Ok((DomainDefineXMLResponse { payload }, len))
+    }
+}
+
+#[derive(Debug)]
+pub struct Domain(remote_nonnull_domain);
+
+impl Domain {
+    pub fn name(&self) -> String {
+        self.0.name.0.clone()
+    }
+
+    pub fn uuid(&self) -> ::uuid::Uuid {
+        let bytes = self.0.uuid.0;
+        ::uuid::Uuid::from_bytes(&bytes).unwrap()
     }
 }

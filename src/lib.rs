@@ -1,5 +1,6 @@
 extern crate xdr_codec;
 extern crate byteorder;
+extern crate uuid;
 
 use xdr_codec::record::{XdrRecordWriter,XdrRecordReader};
 use xdr_codec::{Pack,Unpack};
@@ -205,13 +206,13 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         Ok(names)
     }
 
-    pub fn define(&mut self, xml: &str) -> Result<(), LibvirtError> {
+    pub fn define(&mut self, xml: &str) -> Result<Domain, LibvirtError> {
         let req = DomainDefineXMLRequest::new(self.serial(), xml, 1);
 
         try!(self.write_packet(req));
         let pkt: DomainDefineXMLResponse = try!(self.read_packet_reply());
-        println!("{:?}", pkt);
-        Ok(())
+        let dom = pkt.get_domain();
+        Ok(dom)
     }
 }
 
@@ -234,7 +235,8 @@ mod tests {
         let mut f = File::open("test.xml").unwrap();
         let mut xml = String::new();
         f.read_to_string(&mut xml).unwrap();
-        libvirt.define(&xml).unwrap();
+        let dom = libvirt.define(&xml).unwrap();
+        println!("new domain: name: {:?} uuid: {:?}", dom.name(), dom.uuid());
     }
     /*
     #[test]

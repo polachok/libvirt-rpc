@@ -10,3 +10,4 @@ xdrgen = "0.4"
 [dependencies]
 xdr-codec = { version = "0.4", features = ["bytecodec"] }
 byteorder = "1.0"
+uuid = "0.5"
