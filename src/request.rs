@@ -1,5 +1,8 @@
 use ::xdr_codec;
 use xdr_codec::{Pack,Unpack};
+use std::marker::PhantomData;
+use std::default::Default;
+
 
 const VIR_UUID_BUFLEN: usize = 16;
 const ProcConnectListDefinedDomains: i32 = 21;
@@ -26,11 +29,24 @@ impl Domain {
     }
 }
 
+#[derive(Debug)]
+pub struct LibvirtRequest<P> {
+    header: virNetMessageHeader,
+    payload: P,
+}
+
+impl<P: xdr_codec::Pack<Out>, Out: xdr_codec::Write> Pack<Out> for LibvirtRequest<P> {
+    fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
+        let mut sz: usize = 0;
+        sz += try!(self.header.pack(out));
+        sz += try!(self.payload.pack(out));
+        Ok(sz)
+    }
+}
+
 /// Auth list request must be the first request
 #[derive(Debug)]
-pub struct AuthListRequest {
-    header: virNetMessageHeader,
-}
+pub struct AuthListRequest(LibvirtRequest<()>);
 
 impl AuthListRequest {
     pub fn new(serial: u32) -> Self {
@@ -43,24 +59,22 @@ impl AuthListRequest {
             status: virNetMessageStatus::VIR_NET_OK,
         };
 
-        AuthListRequest {
+        AuthListRequest(LibvirtRequest {
             header: header, 
-        }
+            payload: (),
+        })
     }
 }
 
 impl<Out: xdr_codec::Write> Pack<Out> for AuthListRequest {
     fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        self.header.pack(out)
+        self.0.pack(out)
     }
 }
 
 /// Connect open request
 #[derive(Debug)]
-pub struct ConnectOpenRequest {
-    header: virNetMessageHeader,
-    payload: remote_connect_open_args,
-}
+pub struct ConnectOpenRequest(LibvirtRequest<remote_connect_open_args>);
 
 impl ConnectOpenRequest {
     pub fn new(serial: u32) -> Self {
@@ -78,26 +92,21 @@ impl ConnectOpenRequest {
             flags: 0,
         };
 
-        ConnectOpenRequest {
+        ConnectOpenRequest(LibvirtRequest {
             header: header, 
             payload: payload,
-        }
+        })
     }
 }
 
 impl<Out: xdr_codec::Write> Pack<Out> for ConnectOpenRequest {
     fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        let mut sz = 0;
-        sz += try!(self.header.pack(out));
-        sz += try!(self.payload.pack(out));
-        Ok(sz)
+        self.0.pack(out)
     }
 }
 
 #[derive(Debug)]
-pub struct GetLibVersionRequest {
-    header: virNetMessageHeader,
-}
+pub struct GetLibVersionRequest(LibvirtRequest<()>);
 
 impl GetLibVersionRequest {
     pub fn new(serial: u32) -> Self {
@@ -109,13 +118,13 @@ impl GetLibVersionRequest {
             status: virNetMessageStatus::VIR_NET_OK,
             serial: serial,
         };
-        GetLibVersionRequest { header: h }
+        GetLibVersionRequest(LibvirtRequest { header: h, payload: () })
     }
 }
 
 impl<Out: xdr_codec::Write> Pack<Out> for GetLibVersionRequest {
     fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        self.header.pack(out)
+        self.0.pack(out)
     }
 }
 
@@ -131,10 +140,7 @@ impl<In: xdr_codec::Read> Unpack<In> for GetLibVersionResponse {
     }
 }
 #[derive(Debug)]
-pub struct ListDefinedDomainsRequest {
-    header: virNetMessageHeader,
-    payload: remote_connect_list_defined_domains_args,
-}
+pub struct ListDefinedDomainsRequest(LibvirtRequest<remote_connect_list_defined_domains_args>);
 
 impl ListDefinedDomainsRequest {
     pub fn new(serial: u32) -> Self {
@@ -149,16 +155,13 @@ impl ListDefinedDomainsRequest {
         let payload = remote_connect_list_defined_domains_args {
             maxnames: REMOTE_DOMAIN_LIST_MAX as i32,
         };
-        ListDefinedDomainsRequest { header, payload }
+        ListDefinedDomainsRequest(LibvirtRequest { header, payload })
     }
 }
 
 impl<Out: xdr_codec::Write> Pack<Out> for ListDefinedDomainsRequest {
     fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        let mut sz: usize = 0;
-        sz += try!(self.header.pack(out));
-        sz += try!(self.payload.pack(out));
-        Ok(sz)
+        self.0.pack(out)
     }
 }
 
@@ -185,10 +188,7 @@ impl<In: xdr_codec::Read> Unpack<In> for ListDefinedDomainsResponse {
 }
 
 #[derive(Debug)]
-pub struct DomainDefineXMLRequest {
-    header: virNetMessageHeader,
-    payload: remote_domain_define_xml_flags_args,
-}
+pub struct DomainDefineXMLRequest(LibvirtRequest<remote_domain_define_xml_flags_args>);
 
 impl DomainDefineXMLRequest {
     pub fn new(serial: u32, xml: &str, flags: u32) -> Self {
@@ -205,16 +205,13 @@ impl DomainDefineXMLRequest {
             xml: remote_nonnull_string(xml.to_string()),
             flags: flags,
         };
-        DomainDefineXMLRequest { header, payload }
+        DomainDefineXMLRequest(LibvirtRequest { header, payload })
     }
 }
 
 impl<Out: xdr_codec::Write> Pack<Out> for DomainDefineXMLRequest {
     fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        let mut sz: usize = 0;
-        sz += try!(self.header.pack(out));
-        sz += try!(self.payload.pack(out));
-        Ok(sz)
+        self.0.pack(out)
     }
 }
 
@@ -237,10 +234,7 @@ impl<In: xdr_codec::Read> Unpack<In> for DomainDefineXMLResponse {
 }
 
 #[derive(Debug)]
-pub struct DomainUndefineRequest {
-    header: virNetMessageHeader,
-    payload: remote_domain_undefine_flags_args,
-}
+pub struct DomainUndefineRequest(LibvirtRequest<remote_domain_undefine_flags_args>);
 
 impl DomainUndefineRequest {
     pub fn new(serial: u32, domain: Domain, flags: u32) -> Self {
@@ -258,24 +252,18 @@ impl DomainUndefineRequest {
             dom: domain.0,
             flags: flags,
         };
-        DomainUndefineRequest { header, payload }
+        DomainUndefineRequest(LibvirtRequest { header, payload })
     }
 }
 
 impl<Out: xdr_codec::Write> Pack<Out> for DomainUndefineRequest {
     fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        let mut sz: usize = 0;
-        sz += try!(self.header.pack(out));
-        sz += try!(self.payload.pack(out));
-        Ok(sz)
+        self.0.pack(out)
     }
 }
 
 #[derive(Debug)]
-pub struct DomainCreateRequest {
-    header: virNetMessageHeader,
-    payload: remote_domain_create_with_flags_args,
-}
+pub struct DomainCreateRequest(LibvirtRequest<remote_domain_create_with_flags_args>);
 
 impl DomainCreateRequest {
     pub fn new(serial: u32, domain: Domain, flags: u32) -> Self {
@@ -293,16 +281,13 @@ impl DomainCreateRequest {
             dom: domain.0,
             flags: flags,
         };
-        DomainCreateRequest { header, payload }
+        DomainCreateRequest(LibvirtRequest { header, payload })
     }
 }
 
 impl<Out: xdr_codec::Write> Pack<Out> for DomainCreateRequest {
     fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        let mut sz: usize = 0;
-        sz += try!(self.header.pack(out));
-        sz += try!(self.payload.pack(out));
-        Ok(sz)
+        self.0.pack(out)
     }
 }
 
@@ -324,5 +309,3 @@ impl DomainCreateResponse {
         Domain (self.payload.dom.clone())
     }
 }
-
-
