@@ -6,10 +6,24 @@ const ProcConnectListDefinedDomains: i32 = 21;
 const ProcConnectGetLibVersion: i32 = 157;
 const ProcAuthList: i32 = 66;
 const ProcConnectOpen: i32 = 1;
-
+const ProcDomainUndefineFlags: i32 = 231;
 const ProcDomainDefineXMLFlags: i32 = 350;
 
 include!(concat!(env!("OUT_DIR"), "/virnetprotocol_xdr.rs"));
+
+#[derive(Debug)]
+pub struct Domain(remote_nonnull_domain);
+
+impl Domain {
+    pub fn name(&self) -> String {
+        self.0.name.0.clone()
+    }
+
+    pub fn uuid(&self) -> ::uuid::Uuid {
+        let bytes = self.0.uuid.0;
+        ::uuid::Uuid::from_bytes(&bytes).unwrap()
+    }
+}
 
 /// Auth list request must be the first request
 #[derive(Debug)]
@@ -222,15 +236,36 @@ impl<In: xdr_codec::Read> Unpack<In> for DomainDefineXMLResponse {
 }
 
 #[derive(Debug)]
-pub struct Domain(remote_nonnull_domain);
+pub struct DomainUndefineRequest {
+    header: virNetMessageHeader,
+    payload: remote_domain_undefine_flags_args,
+}
 
-impl Domain {
-    pub fn name(&self) -> String {
-        self.0.name.0.clone()
+impl DomainUndefineRequest {
+    pub fn new(serial: u32, domain: Domain, flags: u32) -> Self {
+        // XXX: use bitflags for flags
+        let header = virNetMessageHeader {
+            prog: 0x20008086,
+            vers: 1,
+            proc_: ProcDomainUndefineFlags,
+            type_: virNetMessageType::VIR_NET_CALL,
+            status: virNetMessageStatus::VIR_NET_OK,
+            serial: serial,
+        };
+
+        let payload = remote_domain_undefine_flags_args {
+            dom: domain.0,
+            flags: flags,
+        };
+        DomainUndefineRequest { header, payload }
     }
+}
 
-    pub fn uuid(&self) -> ::uuid::Uuid {
-        let bytes = self.0.uuid.0;
-        ::uuid::Uuid::from_bytes(&bytes).unwrap()
+impl<Out: xdr_codec::Write> Pack<Out> for DomainUndefineRequest {
+    fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
+        let mut sz: usize = 0;
+        sz += try!(self.header.pack(out));
+        sz += try!(self.payload.pack(out));
+        Ok(sz)
     }
 }

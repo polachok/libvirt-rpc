@@ -289,3 +289,8 @@ struct remote_domain_define_xml_flags_args {
 struct remote_domain_define_xml_flags_ret {
     remote_nonnull_domain dom;
 };
+
+struct remote_domain_undefine_flags_args {
+    remote_nonnull_domain dom;
+    unsigned int flags;
+};

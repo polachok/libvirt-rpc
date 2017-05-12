@@ -214,6 +214,14 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         let dom = pkt.get_domain();
         Ok(dom)
     }
+
+    pub fn undefine(&mut self, dom: Domain) -> Result<(), LibvirtError> {
+        let req = DomainUndefineRequest::new(self.serial(), dom, 0);
+
+        try!(self.write_packet(req));
+        let pkt: () = try!(self.read_packet_reply());
+        Ok(pkt)
+    }
 }
 
 #[cfg(test)]
@@ -237,6 +245,11 @@ mod tests {
         f.read_to_string(&mut xml).unwrap();
         let dom = libvirt.define(&xml).unwrap();
         println!("new domain: name: {:?} uuid: {:?}", dom.name(), dom.uuid());
+        let names = libvirt.list_defined_domains();
+        println!("domains: {:?}", names);
+        libvirt.undefine(dom).unwrap();
+        let names = libvirt.list_defined_domains();
+        println!("domains: {:?}", names);
     }
     /*
     #[test]
