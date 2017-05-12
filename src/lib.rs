@@ -222,6 +222,15 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         let pkt: () = try!(self.read_packet_reply());
         Ok(pkt)
     }
+
+    pub fn start(&mut self, dom: Domain) -> Result<Domain, LibvirtError> {
+        let req = DomainCreateRequest::new(self.serial(), dom, 0);
+
+        try!(self.write_packet(req));
+        let pkt: DomainCreateResponse = try!(self.read_packet_reply());
+        let dom = pkt.get_domain();
+        Ok(dom)
+    }
 }
 
 #[cfg(test)]
@@ -247,7 +256,8 @@ mod tests {
         println!("new domain: name: {:?} uuid: {:?}", dom.name(), dom.uuid());
         let names = libvirt.list_defined_domains();
         println!("domains: {:?}", names);
-        libvirt.undefine(dom).unwrap();
+        let dom = libvirt.start(dom).unwrap();
+        //libvirt.undefine(dom).unwrap();
         let names = libvirt.list_defined_domains();
         println!("domains: {:?}", names);
     }

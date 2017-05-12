@@ -6,6 +6,7 @@ const ProcConnectListDefinedDomains: i32 = 21;
 const ProcConnectGetLibVersion: i32 = 157;
 const ProcAuthList: i32 = 66;
 const ProcConnectOpen: i32 = 1;
+const ProcDomainCreateWithFlags: i32 = 196;
 const ProcDomainUndefineFlags: i32 = 231;
 const ProcDomainDefineXMLFlags: i32 = 350;
 
@@ -269,3 +270,59 @@ impl<Out: xdr_codec::Write> Pack<Out> for DomainUndefineRequest {
         Ok(sz)
     }
 }
+
+#[derive(Debug)]
+pub struct DomainCreateRequest {
+    header: virNetMessageHeader,
+    payload: remote_domain_create_with_flags_args,
+}
+
+impl DomainCreateRequest {
+    pub fn new(serial: u32, domain: Domain, flags: u32) -> Self {
+        // XXX: use bitflags for flags
+        let header = virNetMessageHeader {
+            prog: 0x20008086,
+            vers: 1,
+            proc_: ProcDomainCreateWithFlags,
+            type_: virNetMessageType::VIR_NET_CALL,
+            status: virNetMessageStatus::VIR_NET_OK,
+            serial: serial,
+        };
+
+        let payload = remote_domain_create_with_flags_args {
+            dom: domain.0,
+            flags: flags,
+        };
+        DomainCreateRequest { header, payload }
+    }
+}
+
+impl<Out: xdr_codec::Write> Pack<Out> for DomainCreateRequest {
+    fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
+        let mut sz: usize = 0;
+        sz += try!(self.header.pack(out));
+        sz += try!(self.payload.pack(out));
+        Ok(sz)
+    }
+}
+
+
+#[derive(Debug)]
+pub struct DomainCreateResponse {
+    payload: remote_domain_create_with_flags_ret,
+}
+
+impl<In: xdr_codec::Read> Unpack<In> for DomainCreateResponse {
+    fn unpack(mut input: &mut In) -> xdr_codec::Result<(Self, usize)> {
+        let (payload, len) = try!(remote_domain_create_with_flags_ret::unpack(&mut input));
+        Ok((DomainCreateResponse { payload }, len))
+    }
+}
+
+impl DomainCreateResponse {
+    pub fn get_domain(&self) -> Domain {
+        Domain (self.payload.dom.clone())
+    }
+}
+
+

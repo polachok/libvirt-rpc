@@ -294,3 +294,12 @@ struct remote_domain_undefine_flags_args {
     remote_nonnull_domain dom;
     unsigned int flags;
 };
+
+struct remote_domain_create_with_flags_args {
+    remote_nonnull_domain dom;
+    unsigned int flags;
+};
+
+struct remote_domain_create_with_flags_ret {
+    remote_nonnull_domain dom;
+};
