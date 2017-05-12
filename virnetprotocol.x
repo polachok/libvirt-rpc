@@ -303,3 +303,17 @@ struct remote_domain_create_with_flags_args {
 struct remote_domain_create_with_flags_ret {
     remote_nonnull_domain dom;
 };
+
+/* Maximum number of auth types */
+const REMOTE_AUTH_TYPE_LIST_MAX = 20;
+
+/* Authentication types available thus far.... */
+enum remote_auth_type {
+    REMOTE_AUTH_NONE = 0,
+    REMOTE_AUTH_SASL = 1,
+    REMOTE_AUTH_POLKIT = 2
+};
+
+struct remote_auth_list_ret {
+    remote_auth_type types<REMOTE_AUTH_TYPE_LIST_MAX>;
+};

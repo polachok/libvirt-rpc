@@ -68,20 +68,18 @@ macro_rules! delegate_pack_impl {
 }
 
 #[derive(Debug)]
-pub struct LibvirtResponse<P> {
-    payload: P,
-}
+pub struct LibvirtResponse<P>(P);
 
 impl<P> From<P> for LibvirtResponse<P> {
     fn from(inner: P) -> Self {
-        LibvirtResponse { payload: inner }
+        LibvirtResponse(inner)
     }
 }
 
 impl<P: xdr_codec::Unpack<In>, In: xdr_codec::Read> Unpack<In> for LibvirtResponse<P> {
     fn unpack(mut input: &mut In) -> xdr_codec::Result<(Self, usize)> {
         let (payload, len) = try!(P::unpack(&mut input));
-        Ok((LibvirtResponse { payload }, len))
+        Ok((LibvirtResponse(payload), len))
     }
 }
 
@@ -90,7 +88,10 @@ macro_rules! delegate_unpack_impl {
         impl<In: xdr_codec::Read> Unpack<In> for $t {
             fn unpack(mut input: &mut In) -> xdr_codec::Result<(Self, usize)> {
                 let (inner, len) = try!(xdr_codec::Unpack::unpack(input));
-                Ok((From::from(inner), len))
+                let mut pkt: $t = unsafe { ::std::mem::zeroed() };
+                pkt.0 = inner;
+                Ok((pkt, len))
+                //Ok((From::from(inner), len))
             }
         }
 
@@ -119,6 +120,10 @@ impl AuthListRequest {
 
 delegate_pack_impl!(AuthListRequest);
 
+#[derive(Debug)]
+pub struct AuthListResponse(LibvirtResponse<remote_auth_list_ret>);
+delegate_unpack_impl!(AuthListResponse);
+
 /// Connect open request
 #[derive(Debug)]
 pub struct ConnectOpenRequest(LibvirtRequest<remote_connect_open_args>);
@@ -146,6 +151,10 @@ impl ConnectOpenRequest {
 delegate_pack_impl!(ConnectOpenRequest);
 
 #[derive(Debug)]
+pub struct ConnectOpenResponse(LibvirtResponse<()>);
+delegate_unpack_impl!(ConnectOpenResponse);
+
+#[derive(Debug)]
 pub struct GetLibVersionRequest(LibvirtRequest<()>);
 
 impl GetLibVersionRequest {
@@ -162,8 +171,12 @@ impl GetLibVersionRequest {
 delegate_pack_impl!(GetLibVersionRequest);
 
 #[derive(Debug)]
-pub struct GetLibVersionResponse {
-    pub version: u64,
+pub struct GetLibVersionResponse(LibvirtResponse<u64>);
+
+impl GetLibVersionResponse {
+    pub fn version(&self) -> u64 {
+        (self.0).0
+    }
 }
 
 delegate_unpack_impl!(GetLibVersionResponse);
@@ -188,14 +201,12 @@ impl ListDefinedDomainsRequest {
 delegate_pack_impl!(ListDefinedDomainsRequest);
 
 #[derive(Debug)]
-pub struct ListDefinedDomainsResponse {
-    payload: remote_connect_list_defined_domains_ret,
-}
+pub struct ListDefinedDomainsResponse(LibvirtResponse<remote_connect_list_defined_domains_ret>);
 
 impl ListDefinedDomainsResponse {
     pub fn get_domain_names(&self) -> Vec<String> {
         let mut names = Vec::new();
-        for name in &self.payload.names {
+        for name in &(self.0).0.names {
             names.push(name.0.to_string());
         }
         names
@@ -226,13 +237,11 @@ impl DomainDefineXMLRequest {
 delegate_pack_impl!(DomainDefineXMLRequest);
 
 #[derive(Debug)]
-pub struct DomainDefineXMLResponse {
-    payload: remote_domain_define_xml_flags_ret,
-}
+pub struct DomainDefineXMLResponse(LibvirtResponse<remote_domain_define_xml_flags_ret>);
 
 impl DomainDefineXMLResponse {
     pub fn get_domain(&self) -> Domain {
-        Domain (self.payload.dom.clone())
+        Domain ((self.0).0.dom.clone())
     }
 }
 
@@ -261,6 +270,10 @@ impl DomainUndefineRequest {
 delegate_pack_impl!(DomainUndefineRequest);
 
 #[derive(Debug)]
+pub struct DomainUndefineResponse(LibvirtResponse<()>);
+delegate_unpack_impl!(DomainUndefineResponse);
+
+#[derive(Debug)]
 pub struct DomainCreateRequest(LibvirtRequest<remote_domain_create_with_flags_args>);
 
 impl DomainCreateRequest {
@@ -283,14 +296,12 @@ impl DomainCreateRequest {
 delegate_pack_impl!(DomainCreateRequest);
 
 #[derive(Debug)]
-pub struct DomainCreateResponse {
-    payload: remote_domain_create_with_flags_ret,
-}
+pub struct DomainCreateResponse(LibvirtResponse<remote_domain_create_with_flags_ret>);
 
 delegate_unpack_impl!(DomainCreateResponse);
 
 impl DomainCreateResponse {
     pub fn get_domain(&self) -> Domain {
-        Domain (self.payload.dom.clone())
+        Domain ((self.0).0.dom.clone())
     }
 }

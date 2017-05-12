@@ -161,31 +161,27 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         return Err(LibvirtError::from(err));
     }
 
-    pub fn auth(&mut self) -> Result<(), LibvirtError> {
-        let req = AuthListRequest::new(self.serial());
-
-        try!(self.write_packet(req));
-        try!(self.read_packet_raw());
-
-        return Ok(());
+    fn request<Req: xdr_codec::Pack<Cursor<Vec<u8>>>, Resp: xdr_codec::Unpack<Cursor<Vec<u8>>>>(&mut self, packet: Req) -> Result<Resp, LibvirtError> {
+        try!(self.write_packet(packet));
+        self.read_packet_reply()
     }
 
-    pub fn open(&mut self) -> Result<(), LibvirtError> {
-        let req = ConnectOpenRequest::new(self.serial());
+    pub fn auth(&mut self) -> Result<AuthListResponse, LibvirtError> {
+        let serial = self.serial();
+        self.request(AuthListRequest::new(serial))
+    }
 
-        try!(self.write_packet(req));
-        try!(self.read_packet_raw());
-
-        return Ok(());
+    pub fn open(&mut self) -> Result<ConnectOpenResponse, LibvirtError> {
+        let serial = self.serial();
+        self.request(ConnectOpenRequest::new(serial))
     }
 
     pub fn version(&mut self) -> Result<(u32, u32, u32), LibvirtError> {
-        let req = GetLibVersionRequest::new(self.serial());
+        let serial = self.serial();
 
-        try!(self.write_packet(req));
-        let pkt: GetLibVersionResponse = try!(self.read_packet_reply());
+        let pkt: GetLibVersionResponse = try!(self.request(GetLibVersionRequest::new(serial)));
 
-        let mut version = pkt.version;
+        let mut version = pkt.version();
         let major = version / 1000000;
         version %= 1000000;
         let minor = version / 1000;
@@ -196,10 +192,10 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
     }
 
     pub fn list_defined_domains(&mut self) -> Result<Vec<String>, LibvirtError> {
-        let req = ListDefinedDomainsRequest::new(self.serial());
+        let serial = self.serial();
+        let req = ListDefinedDomainsRequest::new(serial);
 
-        try!(self.write_packet(req));
-        let pkt: ListDefinedDomainsResponse = try!(self.read_packet_reply());
+        let pkt: ListDefinedDomainsResponse = try!(self.request(req));
         let names = pkt.get_domain_names();
         Ok(names)
     }
@@ -207,25 +203,21 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
     pub fn define(&mut self, xml: &str) -> Result<Domain, LibvirtError> {
         let req = DomainDefineXMLRequest::new(self.serial(), xml, 1);
 
-        try!(self.write_packet(req));
-        let pkt: DomainDefineXMLResponse = try!(self.read_packet_reply());
+        let pkt: DomainDefineXMLResponse = try!(self.request(req));
         let dom = pkt.get_domain();
         Ok(dom)
     }
 
-    pub fn undefine(&mut self, dom: Domain) -> Result<(), LibvirtError> {
+    pub fn undefine(&mut self, dom: Domain) -> Result<DomainUndefineResponse, LibvirtError> {
         let req = DomainUndefineRequest::new(self.serial(), dom, 0);
 
-        try!(self.write_packet(req));
-        let pkt: () = try!(self.read_packet_reply());
-        Ok(pkt)
+        self.request(req)
     }
 
     pub fn start(&mut self, dom: Domain) -> Result<Domain, LibvirtError> {
         let req = DomainCreateRequest::new(self.serial(), dom, 0);
 
-        try!(self.write_packet(req));
-        let pkt: DomainCreateResponse = try!(self.read_packet_reply());
+        let pkt: DomainCreateResponse = try!(self.request(req));
         let dom = pkt.get_domain();
         Ok(dom)
     }
