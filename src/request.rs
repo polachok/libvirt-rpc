@@ -42,6 +42,16 @@ impl ::std::default::Default for virNetMessageHeader {
     }
 }
 
+macro_rules! delegate_pack_impl {
+    ($t:ty) => {
+        impl<Out: xdr_codec::Write> Pack<Out> for $t {
+            fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
+                self.0.pack(out)
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct LibvirtRequest<P> {
     header: virNetMessageHeader,
@@ -76,11 +86,7 @@ impl AuthListRequest {
     }
 }
 
-impl<Out: xdr_codec::Write> Pack<Out> for AuthListRequest {
-    fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        self.0.pack(out)
-    }
-}
+delegate_pack_impl!(AuthListRequest);
 
 /// Connect open request
 #[derive(Debug)]
@@ -106,11 +112,7 @@ impl ConnectOpenRequest {
     }
 }
 
-impl<Out: xdr_codec::Write> Pack<Out> for ConnectOpenRequest {
-    fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        self.0.pack(out)
-    }
-}
+delegate_pack_impl!(ConnectOpenRequest);
 
 #[derive(Debug)]
 pub struct GetLibVersionRequest(LibvirtRequest<()>);
@@ -126,11 +128,7 @@ impl GetLibVersionRequest {
     }
 }
 
-impl<Out: xdr_codec::Write> Pack<Out> for GetLibVersionRequest {
-    fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        self.0.pack(out)
-    }
-}
+delegate_pack_impl!(GetLibVersionRequest);
 
 #[derive(Debug)]
 pub struct GetLibVersionResponse {
@@ -160,11 +158,7 @@ impl ListDefinedDomainsRequest {
     }
 }
 
-impl<Out: xdr_codec::Write> Pack<Out> for ListDefinedDomainsRequest {
-    fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        self.0.pack(out)
-    }
-}
+delegate_pack_impl!(ListDefinedDomainsRequest);
 
 #[derive(Debug)]
 pub struct ListDefinedDomainsResponse {
@@ -207,11 +201,7 @@ impl DomainDefineXMLRequest {
     }
 }
 
-impl<Out: xdr_codec::Write> Pack<Out> for DomainDefineXMLRequest {
-    fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        self.0.pack(out)
-    }
-}
+delegate_pack_impl!(DomainDefineXMLRequest);
 
 #[derive(Debug)]
 pub struct DomainDefineXMLResponse {
@@ -251,11 +241,7 @@ impl DomainUndefineRequest {
     }
 }
 
-impl<Out: xdr_codec::Write> Pack<Out> for DomainUndefineRequest {
-    fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        self.0.pack(out)
-    }
-}
+delegate_pack_impl!(DomainUndefineRequest);
 
 #[derive(Debug)]
 pub struct DomainCreateRequest(LibvirtRequest<remote_domain_create_with_flags_args>);
@@ -277,12 +263,7 @@ impl DomainCreateRequest {
     }
 }
 
-impl<Out: xdr_codec::Write> Pack<Out> for DomainCreateRequest {
-    fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-        self.0.pack(out)
-    }
-}
-
+delegate_pack_impl!(DomainCreateRequest);
 
 #[derive(Debug)]
 pub struct DomainCreateResponse {
