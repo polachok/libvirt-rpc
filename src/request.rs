@@ -7,6 +7,8 @@ const ProcConnectGetLibVersion: i32 = 157;
 const ProcAuthList: i32 = 66;
 const ProcConnectOpen: i32 = 1;
 
+const ProcDomainDefineXMLFlags: i32 = 350;
+
 include!(concat!(env!("OUT_DIR"), "/virnetprotocol_xdr.rs"));
 
 /// Auth list request must be the first request
@@ -164,5 +166,50 @@ impl<In: xdr_codec::Read> Unpack<In> for ListDefinedDomainsResponse {
     fn unpack(mut input: &mut In) -> xdr_codec::Result<(Self, usize)> {
         let (v, len) = try!(remote_connect_list_defined_domains_ret::unpack(&mut input));
         Ok((ListDefinedDomainsResponse { payload: v }, len))
+    }
+}
+
+#[derive(Debug)]
+pub struct DomainDefineXMLRequest {
+    header: virNetMessageHeader,
+    payload: remote_domain_define_xml_flags_args,
+}
+
+impl DomainDefineXMLRequest {
+    pub fn new(serial: u32, xml: &str, flags: u32) -> Self {
+        let header = virNetMessageHeader {
+            prog: 0x20008086,
+            vers: 1,
+            proc_: ProcDomainDefineXMLFlags,
+            type_: virNetMessageType::VIR_NET_CALL,
+            status: virNetMessageStatus::VIR_NET_OK,
+            serial: serial,
+        };
+        let payload = remote_domain_define_xml_flags_args {
+            xml: remote_nonnull_string(xml.to_string()),
+            flags: flags,
+        };
+        DomainDefineXMLRequest { header, payload }
+    }
+}
+
+impl<Out: xdr_codec::Write> Pack<Out> for DomainDefineXMLRequest {
+    fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
+        let mut sz: usize = 0;
+        sz += try!(self.header.pack(out));
+        sz += try!(self.payload.pack(out));
+        Ok(sz)
+    }
+}
+
+#[derive(Debug)]
+pub struct DomainDefineXMLResponse {
+    payload: remote_domain_define_xml_flags_ret,
+}
+
+impl<In: xdr_codec::Read> Unpack<In> for DomainDefineXMLResponse {
+    fn unpack(mut input: &mut In) -> xdr_codec::Result<(Self, usize)> {
+        let (payload, len) = try!(remote_domain_define_xml_flags_ret::unpack(&mut input));
+        Ok((DomainDefineXMLResponse { payload }, len))
     }
 }

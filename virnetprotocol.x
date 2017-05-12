@@ -267,6 +267,25 @@ struct remote_connect_list_defined_domains_args {
     int maxnames;
 };
 
+/* UUID.  VIR_UUID_BUFLEN definition comes from libvirt.h */
+typedef opaque remote_uuid[VIR_UUID_BUFLEN];
+
+/* A domain which may not be NULL. */
+struct remote_nonnull_domain {
+    remote_nonnull_string name;
+    remote_uuid uuid;
+    int id;
+};
+
 struct remote_connect_list_defined_domains_ret {
     remote_nonnull_string names<REMOTE_DOMAIN_LIST_MAX>; /* insert@1 */
+};
+
+struct remote_domain_define_xml_flags_args {
+    remote_nonnull_string xml;
+    unsigned int flags;
+};
+
+struct remote_domain_define_xml_flags_ret {
+    remote_nonnull_domain dom;
 };

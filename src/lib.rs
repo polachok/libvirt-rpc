@@ -102,7 +102,8 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
 
     fn write_packet<P: xdr_codec::Pack<Cursor<Vec<u8>>>>(&mut self, packet: P) -> xdr_codec::Result<usize> {
         use std::io::Cursor;
-        use byteorder::{WriteBytesExt,ReadBytesExt};
+        use byteorder::WriteBytesExt;
+
         let mut buf = Vec::new();
         let (sz, buf) = {
             let mut c = Cursor::new(buf);
@@ -118,7 +119,8 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
     }
 
     fn read_packet_raw(&mut self) -> Result<Vec<u8>, LibvirtError> {
-        use byteorder::{WriteBytesExt,ReadBytesExt};
+        use byteorder::ReadBytesExt;
+
         let mut len = try!(self.stream.read_u32::<NetworkEndian>());
         //println!("TOTAL LENGTH {}", len);
         len -= 4; // skip len
@@ -139,7 +141,8 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
     }
 
     fn read_packet_reply<P: xdr_codec::Unpack<Cursor<Vec<u8>>>>(&mut self) -> Result<P, LibvirtError> {
-        use byteorder::{WriteBytesExt,ReadBytesExt};
+        use byteorder::{ReadBytesExt};
+
         let mut len = try!(self.stream.read_u32::<NetworkEndian>());
         len -= 4; // skip len
 
@@ -163,7 +166,7 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         let req = AuthListRequest::new(self.serial());
 
         try!(self.write_packet(req));
-        let buf = try!(self.read_packet_raw());
+        try!(self.read_packet_raw());
 
         return Ok(());
     }
@@ -172,7 +175,7 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         let req = ConnectOpenRequest::new(self.serial());
 
         try!(self.write_packet(req));
-        let buf = try!(self.read_packet_raw());
+        try!(self.read_packet_raw());
 
         return Ok(());
     }
@@ -201,14 +204,25 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         let names = pkt.get_domain_names();
         Ok(names)
     }
+
+    pub fn define(&mut self, xml: &str) -> Result<(), LibvirtError> {
+        let req = DomainDefineXMLRequest::new(self.serial(), xml, 1);
+
+        try!(self.write_packet(req));
+        let pkt: DomainDefineXMLResponse = try!(self.read_packet_reply());
+        println!("{:?}", pkt);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
     fn no_it_doesnt() {
+        use std::fs::File;
         use super::Libvirt;
         use std::os::unix::net::UnixStream;
+        use std::io::Read;
         let mut stream = UnixStream::connect("/var/run/libvirt/libvirt-sock").unwrap();
         let mut libvirt = Libvirt::new(stream);
         libvirt.auth().unwrap();
@@ -217,6 +231,10 @@ mod tests {
         println!("version: {}.{}.{}", major, minor, micro);
         let names = libvirt.list_defined_domains();
         println!("domains: {:?}", names);
+        let mut f = File::open("test.xml").unwrap();
+        let mut xml = String::new();
+        f.read_to_string(&mut xml).unwrap();
+        libvirt.define(&xml).unwrap();
     }
     /*
     #[test]
