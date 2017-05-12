@@ -16,8 +16,6 @@ const ProcConnectGetLibVersion: i32 = 157;
 const ProcAuthList: i32 = 66;
 const ProcConnectOpen: i32 = 1;
 
-include!(concat!(env!("OUT_DIR"), "/virnetprotocol_xdr.rs"));
-
 use std::os::unix::net::UnixStream;
 use std::io::Cursor;
 
@@ -29,7 +27,7 @@ pub struct Libvirt<Io: ::std::io::Read+::std::io::Write> {
 #[derive(Debug)]
 pub enum LibvirtError {
     XdrError(xdr_codec::Error),
-    Libvirt(virNetMessageError),
+    Libvirt(request::virNetMessageError),
 }
 
 impl ::std::convert::From<::std::io::Error> for LibvirtError {
