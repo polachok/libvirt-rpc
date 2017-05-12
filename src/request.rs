@@ -1,6 +1,6 @@
 use ::xdr_codec;
 use xdr_codec::{Pack,Unpack};
-use std::marker::PhantomData;
+use std::convert::From;
 use std::default::Default;
 
 
@@ -42,16 +42,6 @@ impl ::std::default::Default for virNetMessageHeader {
     }
 }
 
-macro_rules! delegate_pack_impl {
-    ($t:ty) => {
-        impl<Out: xdr_codec::Write> Pack<Out> for $t {
-            fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
-                self.0.pack(out)
-            }
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct LibvirtRequest<P> {
     header: virNetMessageHeader,
@@ -66,6 +56,47 @@ impl<P: xdr_codec::Pack<Out>, Out: xdr_codec::Write> Pack<Out> for LibvirtReques
         Ok(sz)
     }
 }
+
+macro_rules! delegate_pack_impl {
+    ($t:ty) => {
+        impl<Out: xdr_codec::Write> Pack<Out> for $t {
+            fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
+                self.0.pack(out)
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct LibvirtResponse<P> {
+    payload: P,
+}
+
+impl<P> From<P> for LibvirtResponse<P> {
+    fn from(inner: P) -> Self {
+        LibvirtResponse { payload: inner }
+    }
+}
+
+impl<P: xdr_codec::Unpack<In>, In: xdr_codec::Read> Unpack<In> for LibvirtResponse<P> {
+    fn unpack(mut input: &mut In) -> xdr_codec::Result<(Self, usize)> {
+        let (payload, len) = try!(P::unpack(&mut input));
+        Ok((LibvirtResponse { payload }, len))
+    }
+}
+
+macro_rules! delegate_unpack_impl {
+    ($t:ty) => {
+        impl<In: xdr_codec::Read> Unpack<In> for $t {
+            fn unpack(mut input: &mut In) -> xdr_codec::Result<(Self, usize)> {
+                let (inner, len) = try!(xdr_codec::Unpack::unpack(input));
+                Ok((From::from(inner), len))
+            }
+        }
+
+    }
+}
+
 
 /// Auth list request must be the first request
 #[derive(Debug)]
@@ -135,12 +166,8 @@ pub struct GetLibVersionResponse {
     pub version: u64,
 }
 
-impl<In: xdr_codec::Read> Unpack<In> for GetLibVersionResponse {
-    fn unpack(mut input: &mut In) -> xdr_codec::Result<(Self, usize)> {
-        let (v, len2) = try!(u64::unpack(&mut input));
-        Ok((GetLibVersionResponse { version: v }, len2))
-    }
-}
+delegate_unpack_impl!(GetLibVersionResponse);
+
 #[derive(Debug)]
 pub struct ListDefinedDomainsRequest(LibvirtRequest<remote_connect_list_defined_domains_args>);
 
@@ -175,12 +202,7 @@ impl ListDefinedDomainsResponse {
     }
 }
 
-impl<In: xdr_codec::Read> Unpack<In> for ListDefinedDomainsResponse {
-    fn unpack(mut input: &mut In) -> xdr_codec::Result<(Self, usize)> {
-        let (v, len) = try!(remote_connect_list_defined_domains_ret::unpack(&mut input));
-        Ok((ListDefinedDomainsResponse { payload: v }, len))
-    }
-}
+delegate_unpack_impl!(ListDefinedDomainsResponse);
 
 #[derive(Debug)]
 pub struct DomainDefineXMLRequest(LibvirtRequest<remote_domain_define_xml_flags_args>);
@@ -214,12 +236,7 @@ impl DomainDefineXMLResponse {
     }
 }
 
-impl<In: xdr_codec::Read> Unpack<In> for DomainDefineXMLResponse {
-    fn unpack(mut input: &mut In) -> xdr_codec::Result<(Self, usize)> {
-        let (payload, len) = try!(remote_domain_define_xml_flags_ret::unpack(&mut input));
-        Ok((DomainDefineXMLResponse { payload }, len))
-    }
-}
+delegate_unpack_impl!(DomainDefineXMLResponse);
 
 #[derive(Debug)]
 pub struct DomainUndefineRequest(LibvirtRequest<remote_domain_undefine_flags_args>);
@@ -270,12 +287,7 @@ pub struct DomainCreateResponse {
     payload: remote_domain_create_with_flags_ret,
 }
 
-impl<In: xdr_codec::Read> Unpack<In> for DomainCreateResponse {
-    fn unpack(mut input: &mut In) -> xdr_codec::Result<(Self, usize)> {
-        let (payload, len) = try!(remote_domain_create_with_flags_ret::unpack(&mut input));
-        Ok((DomainCreateResponse { payload }, len))
-    }
-}
+delegate_unpack_impl!(DomainCreateResponse);
 
 impl DomainCreateResponse {
     pub fn get_domain(&self) -> Domain {
