@@ -29,6 +29,19 @@ impl Domain {
     }
 }
 
+impl ::std::default::Default for virNetMessageHeader {
+    fn default() -> Self {
+        virNetMessageHeader {
+            prog: 0x20008086,
+            vers: 1,
+            proc_: 0,
+            type_: virNetMessageType::VIR_NET_CALL,
+            serial: 0,
+            status: virNetMessageStatus::VIR_NET_OK,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct LibvirtRequest<P> {
     header: virNetMessageHeader,
@@ -51,12 +64,9 @@ pub struct AuthListRequest(LibvirtRequest<()>);
 impl AuthListRequest {
     pub fn new(serial: u32) -> Self {
         let header = virNetMessageHeader {
-            prog: 0x20008086,
-            vers: 1,
             proc_: ProcAuthList,
-            type_: virNetMessageType::VIR_NET_CALL,
             serial: serial,
-            status: virNetMessageStatus::VIR_NET_OK,
+            ..Default::default()
         };
 
         AuthListRequest(LibvirtRequest {
@@ -79,12 +89,9 @@ pub struct ConnectOpenRequest(LibvirtRequest<remote_connect_open_args>);
 impl ConnectOpenRequest {
     pub fn new(serial: u32) -> Self {
         let header = virNetMessageHeader {
-            prog: 0x20008086,
-            vers: 1,
             proc_: ProcConnectOpen,
-            type_: virNetMessageType::VIR_NET_CALL,
             serial: serial,
-            status: virNetMessageStatus::VIR_NET_OK,
+            ..Default::default()
         };
 
         let payload = remote_connect_open_args {
@@ -111,12 +118,9 @@ pub struct GetLibVersionRequest(LibvirtRequest<()>);
 impl GetLibVersionRequest {
     pub fn new(serial: u32) -> Self {
         let h = virNetMessageHeader {
-            prog: 0x20008086,
-            vers: 1,
             proc_: ProcConnectGetLibVersion,
-            type_: virNetMessageType::VIR_NET_CALL,
-            status: virNetMessageStatus::VIR_NET_OK,
             serial: serial,
+            ..Default::default()
         };
         GetLibVersionRequest(LibvirtRequest { header: h, payload: () })
     }
@@ -145,12 +149,9 @@ pub struct ListDefinedDomainsRequest(LibvirtRequest<remote_connect_list_defined_
 impl ListDefinedDomainsRequest {
     pub fn new(serial: u32) -> Self {
         let header = virNetMessageHeader {
-            prog: 0x20008086,
-            vers: 1,
             proc_: ProcConnectListDefinedDomains,
-            type_: virNetMessageType::VIR_NET_CALL,
-            status: virNetMessageStatus::VIR_NET_OK,
             serial: serial,
+            ..Default::default()
         };
         let payload = remote_connect_list_defined_domains_args {
             maxnames: REMOTE_DOMAIN_LIST_MAX as i32,
@@ -194,12 +195,9 @@ impl DomainDefineXMLRequest {
     pub fn new(serial: u32, xml: &str, flags: u32) -> Self {
         // XXX: use bitflags for flags
         let header = virNetMessageHeader {
-            prog: 0x20008086,
-            vers: 1,
             proc_: ProcDomainDefineXMLFlags,
-            type_: virNetMessageType::VIR_NET_CALL,
-            status: virNetMessageStatus::VIR_NET_OK,
             serial: serial,
+            ..Default::default()
         };
         let payload = remote_domain_define_xml_flags_args {
             xml: remote_nonnull_string(xml.to_string()),
@@ -240,12 +238,9 @@ impl DomainUndefineRequest {
     pub fn new(serial: u32, domain: Domain, flags: u32) -> Self {
         // XXX: use bitflags for flags
         let header = virNetMessageHeader {
-            prog: 0x20008086,
-            vers: 1,
             proc_: ProcDomainUndefineFlags,
-            type_: virNetMessageType::VIR_NET_CALL,
-            status: virNetMessageStatus::VIR_NET_OK,
             serial: serial,
+            ..Default::default()
         };
 
         let payload = remote_domain_undefine_flags_args {
@@ -269,12 +264,9 @@ impl DomainCreateRequest {
     pub fn new(serial: u32, domain: Domain, flags: u32) -> Self {
         // XXX: use bitflags for flags
         let header = virNetMessageHeader {
-            prog: 0x20008086,
-            vers: 1,
             proc_: ProcDomainCreateWithFlags,
-            type_: virNetMessageType::VIR_NET_CALL,
-            status: virNetMessageStatus::VIR_NET_OK,
             serial: serial,
+            ..Default::default()
         };
 
         let payload = remote_domain_create_with_flags_args {
