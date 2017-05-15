@@ -13,7 +13,8 @@ fn main() {
     // first process it with cpp to eval defines
     let cpp = Command::new("/usr/bin/cpp")
     // constants from libvirt-host.h
-        .arg("-include libvirt-defs.h")
+        .arg("-include")
+        .arg("libvirt-defs.h")
         .arg("remote_protocol.x")
         .output().unwrap();
 
