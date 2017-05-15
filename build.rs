@@ -13,9 +13,7 @@ fn main() {
     // first process it with cpp to eval defines
     let cpp = Command::new("/usr/bin/cpp")
     // constants from libvirt-host.h
-        .arg("-DVIR_SECURITY_MODEL_BUFLEN=257")
-        .arg("-DVIR_SECURITY_LABEL_BUFLEN=4097")
-        .arg("-DVIR_SECURITY_DOI_BUFLEN=257")
+        .arg("-include libvirt-defs.h")
         .arg("remote_protocol.x")
         .output().unwrap();
 
@@ -26,6 +24,7 @@ fn main() {
     let mut file = OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(true)
         .open(&path).unwrap();
     file.write_all(&cpp.stdout).unwrap();
 
