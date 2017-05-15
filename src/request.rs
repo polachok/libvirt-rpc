@@ -14,6 +14,10 @@ const ProcDomainUndefineFlags: i32 = 231;
 const ProcDomainDefineXMLFlags: i32 = 350;
 
 include!(concat!(env!("OUT_DIR"), "/virnetprotocol_xdr.rs"));
+include!(concat!(env!("OUT_DIR"), "/remote_protocol_xdr.rs"));
+
+// Work around a problem with xdrgen
+impl Copy for remote_uuid { }
 
 #[derive(Debug)]
 pub struct Domain(remote_nonnull_domain);
