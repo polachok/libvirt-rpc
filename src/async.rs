@@ -1,8 +1,7 @@
-use std::io;
 use std::io::Cursor;
 use std::path::Path;
 use ::xdr_codec::{Pack,Unpack};
-use ::bytes::{BufMut,BytesMut,ByteOrder,BigEndian};
+use ::bytes::{BufMut,BytesMut,BigEndian};
 use ::tokio_io::codec;
 use ::tokio_io::{AsyncRead,AsyncWrite};
 use ::tokio_io::codec::length_delimited;
@@ -50,7 +49,6 @@ impl codec::Decoder for LibvirtCodec {
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         use ::std::io::ErrorKind;
-        use bytes::IntoBuf;
         println!("DECODING");
         let mut reader = Cursor::new(buf);
         let (header, hlen) = try!(request::virNetMessageHeader::unpack(&mut reader)
@@ -60,36 +58,26 @@ impl codec::Decoder for LibvirtCodec {
     }
 }
 
-struct LibvirtProto;
+fn framed_delimited<T, C>(framed: length_delimited::Framed<T>, codec: C) -> FramedTransport<T, C>
+    where T: AsyncRead + AsyncWrite, C: codec::Encoder + codec::Decoder
+ {
+    FramedTransport{ inner: framed, codec: codec }
+}
 
-struct LibvirtTransport<T> {
+struct FramedTransport<T, C> where T: AsyncRead + AsyncWrite + 'static {
     inner: length_delimited::Framed<T>,
+    codec: C,
 }
 
-impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWrite + 'static {
-    type Request = LibvirtMessage;
-    type Response = LibvirtMessage;
-    type Transport = LibvirtTransport<T>;
-    type BindTransport = Result<Self::Transport, ::std::io::Error>;
-    fn bind_transport(&self, io: T) -> Self::BindTransport {
-        let framed = length_delimited::Builder::new()
-                        .big_endian()
-                        .length_field_offset(0)
-                        .length_field_length(4)
-                        .length_adjustment(-4)
-                        .new_framed(io);
-        Ok(LibvirtTransport{ inner: framed })
-    }
-}
-
-impl<T> Stream for LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
-    type Item = LibvirtFrame<LibvirtMessage>;
-    type Error = ::std::io::Error;
+impl<T, C> Stream for FramedTransport<T, C> where
+                T: AsyncRead + AsyncWrite, C: codec::Decoder,
+                ::std::io::Error: ::std::convert::From<<C as ::tokio_io::codec::Decoder>::Error> {
+    type Item = <C as codec::Decoder>::Item;
+    type Error = <C as codec::Decoder>::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        use tokio_io::codec::Decoder;
         use futures::Async;
-        let mut codec = LibvirtCodec;
+        let codec = &mut self.codec;
         self.inner.poll().and_then(|async| {
             match async {
                 Async::Ready(Some(mut buf)) => {
@@ -103,18 +91,20 @@ impl<T> Stream for LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static
                     Ok(Async::NotReady)
                 }
             }
-        })
+        }).map_err(|e| e.into())
     }
 }
 
-impl<T> Sink for LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
-    type SinkItem = LibvirtFrame<LibvirtMessage>;
-    type SinkError = ::std::io::Error;
+impl<T, C> Sink for FramedTransport<T, C> where
+        T: AsyncRead + AsyncWrite + 'static,
+        C: codec::Encoder + codec::Decoder,
+        ::std::io::Error: ::std::convert::From<<C as ::tokio_io::codec::Encoder>::Error> {
+    type SinkItem = <C as codec::Encoder>::Item;
+    type SinkError = <C as codec::Encoder>::Error;
 
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        use tokio_io::codec::Encoder;
         use futures::AsyncSink;
-        let mut codec = LibvirtCodec;
+        let codec = &mut self.codec;
         let mut buf = BytesMut::with_capacity(64);
         try!(codec.encode(item, &mut buf));
         assert!(try!(self.inner.start_send(buf)).is_ready());
@@ -122,12 +112,32 @@ impl<T> Sink for LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     }
 
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        self.inner.poll_complete()
+        self.inner.poll_complete().map_err(|e| e.into())
     }
 
-    fn close(&mut self) -> Poll<(), io::Error> {
-        try_ready!(self.poll_complete());
-        self.inner.close()
+    fn close(&mut self) -> Poll<(), Self::SinkError> {
+        try_ready!(self.poll_complete().map_err(|e| e.into()));
+        self.inner.close().map_err(|e| e.into())
+    }
+}
+
+type LibvirtTransport<T> = FramedTransport<T, LibvirtCodec>;
+
+struct LibvirtProto;
+
+impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWrite + 'static {
+    type Request = LibvirtMessage;
+    type Response = LibvirtMessage;
+    type Transport = LibvirtTransport<T>;
+    type BindTransport = Result<Self::Transport, ::std::io::Error>;
+    fn bind_transport(&self, io: T) -> Self::BindTransport {
+        let framed = length_delimited::Builder::new()
+                        .big_endian()
+                        .length_field_offset(0)
+                        .length_field_length(4)
+                        .length_adjustment(-4)
+                        .new_framed(io);
+        Ok(framed_delimited(framed, LibvirtCodec))
     }
 }
 
