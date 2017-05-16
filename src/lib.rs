@@ -1,6 +1,15 @@
 extern crate xdr_codec;
 extern crate byteorder;
 extern crate uuid;
+extern crate tokio_io;
+extern crate tokio_proto;
+extern crate tokio_service;
+extern crate tokio_core;
+extern crate tokio_uds;
+extern crate tokio_uds_proto;
+extern crate bytes;
+#[macro_use]
+extern crate futures;
 
 use xdr_codec::record::{XdrRecordWriter,XdrRecordReader};
 use xdr_codec::{Pack,Unpack};
@@ -9,6 +18,7 @@ use std::io::{BufWriter,BufReader};
 use byteorder::NetworkEndian;
 
 mod request;
+mod async;
 use request::*;
 
 const VIR_UUID_BUFLEN: usize = 16;
@@ -222,7 +232,6 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         Ok(dom)
     }
 }
-
 #[cfg(test)]
 mod tests {
     #[test]
@@ -234,6 +243,7 @@ mod tests {
         let mut stream = UnixStream::connect("/var/run/libvirt/libvirt-sock").unwrap();
         let mut libvirt = Libvirt::new(stream);
         libvirt.auth().unwrap();
+        /*
         libvirt.open().unwrap();
         let (major, minor, micro) = libvirt.version().unwrap();
         println!("version: {}.{}.{}", major, minor, micro);
@@ -250,6 +260,7 @@ mod tests {
         //libvirt.undefine(dom).unwrap();
         let names = libvirt.list_defined_domains();
         println!("domains: {:?}", names);
+        */
     }
     /*
     #[test]

@@ -11,3 +11,14 @@ xdrgen = "0.4"
 xdr-codec = { version = "0.4", features = ["bytecodec"] }
 byteorder = "1.0"
 uuid = "0.5"
+futures = "0.1.6"
+tokio-proto = "0.1"
+tokio-service = "0.1"
+tokio-core = "0.1"
+tokio-io = "0.1.1"
+tokio-uds = "0.1"
+tokio-uds-proto = "0.1"
+bytes = "0.4"
+
+[replace]
+"tokio-io:0.1.1" = { path = "./tokio-io" }
