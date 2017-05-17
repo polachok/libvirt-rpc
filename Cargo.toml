@@ -21,4 +21,4 @@ tokio-uds-proto = "0.1"
 bytes = "0.4"
 
 [replace]
-"tokio-io:0.1.1" = { path = "./tokio-io" }
+"tokio-io:0.1.1" = { git = "https://github.com/tokio-rs/tokio-io" }
