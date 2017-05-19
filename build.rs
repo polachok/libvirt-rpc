@@ -6,22 +6,20 @@ use std::env;
 use std::path::PathBuf;
 use std::io::Write;
 
-fn main() {
-    xdrgen::compile("virnetprotocol.x").unwrap();
-
+fn compile(source: &str) {
     // compiling remote_protocol.x is a bit more involved
     // first process it with cpp to eval defines
     let cpp = Command::new("/usr/bin/cpp")
     // constants from libvirt-host.h
         .arg("-include")
         .arg("libvirt-defs.h")
-        .arg("remote_protocol.x")
+        .arg(source)
         .output().unwrap();
 
     // then write output to temporarily file
     let out_dir = env::var("OUT_DIR").unwrap();
     let mut path = PathBuf::from(out_dir);
-    path.push("remote_protocol.x");
+    path.push(source);
     let mut file = OpenOptions::new()
         .write(true)
         .create(true)
@@ -32,4 +30,9 @@ fn main() {
     // finally run xdrgen
     let path_str = format!("{}", path.display());
     xdrgen::compile(path_str).unwrap();
+}
+
+fn main() {
+    compile("virnetprotocol.x");
+    compile("remote_protocol.x");
 }
