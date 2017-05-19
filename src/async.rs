@@ -16,63 +16,15 @@ use ::env_logger;
 pub struct LibvirtCodec;
 
 #[derive(Debug)]
-pub enum LibvirtRequest {
-    AuthListRequest,
-    ConnectOpenRequest,
-    LibVersionRequest,
+pub struct LibvirtRequest {
+    header: request::virNetMessageHeader,
+    payload: BytesMut,
 }
 
 #[derive(Debug)]
-pub enum LibvirtResponse {
-    AuthListResponse(request::AuthListResponse),
-    ConnectOpenResponse(request::ConnectOpenResponse),
-    LibVersionResponse(request::GetLibVersionResponse),
-}
-
-impl LibvirtRequest {
-    fn encode(&self, serial: RequestId, buf: &mut BytesMut) -> Result<(), LibvirtError> {
-        use self::LibvirtRequest::*;
-        let mut writer = buf.writer();
-
-        match self {
-                &AuthListRequest => {
-                    let packet = request::AuthListRequest::new(serial as u32);
-                    try!(packet.pack(&mut writer));
-                },
-                &ConnectOpenRequest => {
-                    let packet = request::ConnectOpenRequest::new(serial as u32);
-                    try!(packet.pack(&mut writer));
-                },
-                &LibVersionRequest => {
-                    let packet = request::GetLibVersionRequest::new(serial as u32);
-                    try!(packet.pack(&mut writer));
-                }
-        }
-        Ok(())
-    }
-}
-
-impl LibvirtResponse {
-    fn decode<R: ::std::io::Read>(proc_: i32, mut reader: R) -> Result<Self, LibvirtError> {
-        let proc_num = proc_ as i16;
-        let procedure: request::remote_procedure = unsafe { ::std::mem::transmute(proc_num) };
-        let req = match procedure {
-            request::remote_procedure::REMOTE_PROC_AUTH_LIST => {
-                let (req, _) = try!(request::AuthListResponse::unpack(&mut reader));
-                LibvirtResponse::AuthListResponse(req)
-            },
-            request::remote_procedure::REMOTE_PROC_CONNECT_OPEN => {
-                let (req, _) = try!(request::ConnectOpenResponse::unpack(&mut reader));
-                LibvirtResponse::ConnectOpenResponse(req)
-            },
-            request::remote_procedure::REMOTE_PROC_CONNECT_GET_LIB_VERSION => {
-                let (req, _) = try!(request::GetLibVersionResponse::unpack(&mut reader));
-                LibvirtResponse::LibVersionResponse(req)
-            },
-            _ => unimplemented!(),
-        };
-        Ok(req)
-    }
+pub struct LibvirtResponse {
+    header: request::virNetMessageHeader,
+    payload: BytesMut,
 }
 
 impl codec::Encoder for LibvirtCodec {
@@ -81,7 +33,15 @@ impl codec::Encoder for LibvirtCodec {
 
     fn encode(&mut self, msg: (RequestId, LibvirtRequest), buf: &mut BytesMut) -> Result<(), Self::Error> {
         use ::std::io::ErrorKind;
-        msg.1.encode(msg.0, buf).map_err(|e| ::std::io::Error::new(ErrorKind::InvalidInput, e.to_string()))
+        let mut req = msg.1;
+        let buf = {
+            let mut writer = buf.writer();
+            req.header.serial = msg.0 as u32;
+            try!(req.header.pack(&mut writer).map_err(|e| ::std::io::Error::new(ErrorKind::InvalidInput, e.to_string())));
+            writer.into_inner()
+        };
+        buf.put(req.payload);
+        Ok(())
     }
 }
 
@@ -91,12 +51,17 @@ impl codec::Decoder for LibvirtCodec {
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         use ::std::io::ErrorKind;
-        let mut reader = Cursor::new(buf);
-        let (header, _) = try!(request::virNetMessageHeader::unpack(&mut reader)
-                                    .map_err(|e| ::std::io::Error::new(ErrorKind::InvalidInput, "fuck")));
-        let resp = try!(LibvirtResponse::decode(header.proc_, &mut reader)
-                                    .map_err(|e| ::std::io::Error::new(ErrorKind::InvalidInput, "fuck")));
-        Ok(Some((header.serial as RequestId, resp)))
+        let (header, hlen, buf) = {
+            let mut reader = Cursor::new(buf);
+            let (header, hlen) = try!(request::virNetMessageHeader::unpack(&mut reader)
+                                        .map_err(|e| ::std::io::Error::new(ErrorKind::InvalidInput, e.to_string())));
+            (header, hlen, reader.into_inner())
+        };
+        let payload = buf.split_off(hlen);
+        Ok(Some((header.serial as RequestId, LibvirtResponse {
+            header: header,
+            payload: payload,
+        })))
     }
 }
 
@@ -195,19 +160,65 @@ impl Client {
                 .map(|inner| Client { inner })
     }
 
-    pub fn auth(&self) -> <Self as Service>::Future {
-        use self::LibvirtRequest::*;
-        self.inner.call(AuthListRequest).boxed()
+    fn pack<P: Pack<::bytes::Writer<::bytes::BytesMut>>>(procedure: request::remote_procedure, payload: P) -> Result<LibvirtRequest, ::xdr_codec::Error> {
+        let mut buf = BytesMut::with_capacity(100);
+        let buf = {
+            let mut writer = buf.writer();
+            try!(payload.pack(&mut writer));
+            writer.into_inner()
+        };
+        let req = LibvirtRequest {
+            header: request::virNetMessageHeader {
+                proc_: procedure as i32,
+                ..Default::default()
+            },
+            payload: buf,
+        };
+        Ok(req)
     }
 
-    pub fn open(&self) -> <Self as Service>::Future {
-        use self::LibvirtRequest::*;
-        self.inner.call(ConnectOpenRequest).boxed()
+    fn handle_response<'a, P: Unpack<Cursor<::bytes::BytesMut>>>(resp: LibvirtResponse) -> Result<P, LibvirtError> {
+        let mut reader = Cursor::new(resp.payload);
+        if resp.header.status == request::virNetMessageStatus::VIR_NET_OK {
+            let (pkt, _) = try!(P::unpack(&mut reader));
+            Ok(pkt)
+        } else {
+            let (err, _) = try!(request::virNetMessageError::unpack(&mut reader));
+            Err(err.into())
+        }
     }
 
-    pub fn version(&self) -> <Self as Service>::Future {
-        use self::LibvirtRequest::*;
-        self.inner.call(LibVersionRequest).boxed()
+    fn request<P, U>(&self, procedure: request::remote_procedure, payload: P) -> ::futures::BoxFuture<U, LibvirtError>
+        where P: Pack<::bytes::Writer<::bytes::BytesMut>>, U: Unpack<Cursor<::bytes::BytesMut>> + Send + 'static
+     {
+        let req = Self::pack(procedure, payload);
+        match req {
+            Err(e) => {
+                future::err(e.into()).boxed()
+            },
+            Ok(req) => self.call(req)
+                        .map_err(|e| e.into())
+                        .and_then(Self::handle_response)
+                        .boxed()
+        }
+    }
+
+    pub fn auth(&self) -> ::futures::BoxFuture<request::AuthListResponse, LibvirtError> {
+        self.request(request::remote_procedure::REMOTE_PROC_AUTH_LIST, ())
+    }
+
+    pub fn open(&self) -> ::futures::BoxFuture<request::ConnectOpenResponse, LibvirtError> {
+        use request::generated;
+        let pl = generated::remote_connect_open_args {
+            name: Some(generated::remote_nonnull_string("qemu:///system".to_string())),
+            flags: 0,
+        };
+
+        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_OPEN, pl)
+    }
+
+    pub fn version(&self) -> ::futures::BoxFuture<request::GetLibVersionResponse, LibvirtError> {
+        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_GET_LIB_VERSION, ())
     }
 }
 
@@ -235,10 +246,4 @@ fn such_async() {
             .and_then(|_| client.version())
     }).unwrap();
     println!("{:?}", result);
-    match result {
-        LibvirtResponse::LibVersionResponse(payload) => {
-            println!("version: {}", payload.version())
-        },
-        _ => unimplemented!(),
-    }
 }

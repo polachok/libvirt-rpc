@@ -3,7 +3,7 @@ use xdr_codec::{Pack,Unpack};
 use std::convert::From;
 use std::default::Default;
 
-mod generated {
+pub mod generated {
     #![allow(non_camel_case_types)]
     #![allow(dead_code)]
     #![allow(non_snake_case)]
