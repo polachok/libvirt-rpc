@@ -319,3 +319,47 @@ impl ListAllDomainsResponse {
 
 delegate_unpack_impl!(ListAllDomainsResponse);
 
+#[derive(Debug)]
+pub struct DomainEventCallbackRegisterAnyRequest(generated::remote_connect_domain_event_callback_register_any_args);
+
+impl DomainEventCallbackRegisterAnyRequest {
+    pub fn new(event: i32, domain: &Domain) -> Self {
+        let payload = generated::remote_connect_domain_event_callback_register_any_args {
+            eventID: event,
+            dom: Some(Box::new(domain.0.clone())),
+        };
+        DomainEventCallbackRegisterAnyRequest(payload)
+    }
+}
+
+delegate_pack_impl!(DomainEventCallbackRegisterAnyRequest);
+
+#[derive(Debug)]
+pub struct DomainEventCallbackRegisterAnyResponse(generated::remote_connect_domain_event_callback_register_any_ret);
+
+delegate_unpack_impl!(DomainEventCallbackRegisterAnyResponse);
+
+#[derive(Debug)]
+pub struct DomainLookupByUuidRequest(generated::remote_domain_lookup_by_uuid_args);
+
+impl DomainLookupByUuidRequest {
+    pub fn new(uuid: &::uuid::Uuid) -> Self {
+        let payload = generated::remote_domain_lookup_by_uuid_args {
+            uuid: generated::remote_uuid(uuid.as_bytes().clone()),
+        };
+        DomainLookupByUuidRequest(payload)
+    }
+}
+
+delegate_pack_impl!(DomainLookupByUuidRequest);
+
+#[derive(Debug)]
+pub struct DomainLookupByUuidResponse(generated::remote_domain_lookup_by_uuid_ret);
+
+impl DomainLookupByUuidResponse {
+    pub fn domain(&self) -> Domain {
+        Domain ((self.0).dom.clone())
+    }
+}
+
+delegate_unpack_impl!(DomainLookupByUuidResponse);
