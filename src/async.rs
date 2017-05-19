@@ -18,21 +18,35 @@ pub struct LibvirtCodec;
 #[derive(Debug)]
 pub enum LibvirtRequest {
     AuthListRequest,
+    ConnectOpenRequest,
+    LibVersionRequest,
 }
 
 #[derive(Debug)]
 pub enum LibvirtResponse {
     AuthListResponse(request::AuthListResponse),
+    ConnectOpenResponse(request::ConnectOpenResponse),
+    LibVersionResponse(request::GetLibVersionResponse),
 }
 
 impl LibvirtRequest {
     fn encode(&self, serial: RequestId, buf: &mut BytesMut) -> Result<(), LibvirtError> {
+        use self::LibvirtRequest::*;
         let mut writer = buf.writer();
+
         match self {
-                &self::LibvirtRequest::AuthListRequest => {
+                &AuthListRequest => {
                     let packet = request::AuthListRequest::new(serial as u32);
                     try!(packet.pack(&mut writer));
                 },
+                &ConnectOpenRequest => {
+                    let packet = request::ConnectOpenRequest::new(serial as u32);
+                    try!(packet.pack(&mut writer));
+                },
+                &LibVersionRequest => {
+                    let packet = request::GetLibVersionRequest::new(serial as u32);
+                    try!(packet.pack(&mut writer));
+                }
         }
         Ok(())
     }
@@ -40,10 +54,20 @@ impl LibvirtRequest {
 
 impl LibvirtResponse {
     fn decode<R: ::std::io::Read>(proc_: i32, mut reader: R) -> Result<Self, LibvirtError> {
-        let req = match proc_ {
-            request::ProcAuthList => {
+        let proc_num = proc_ as i16;
+        let procedure: request::remote_procedure = unsafe { ::std::mem::transmute(proc_num) };
+        let req = match procedure {
+            request::remote_procedure::REMOTE_PROC_AUTH_LIST => {
                 let (req, _) = try!(request::AuthListResponse::unpack(&mut reader));
                 LibvirtResponse::AuthListResponse(req)
+            },
+            request::remote_procedure::REMOTE_PROC_CONNECT_OPEN => {
+                let (req, _) = try!(request::ConnectOpenResponse::unpack(&mut reader));
+                LibvirtResponse::ConnectOpenResponse(req)
+            },
+            request::remote_procedure::REMOTE_PROC_CONNECT_GET_LIB_VERSION => {
+                let (req, _) = try!(request::GetLibVersionResponse::unpack(&mut reader));
+                LibvirtResponse::LibVersionResponse(req)
             },
             _ => unimplemented!(),
         };
@@ -164,15 +188,28 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn connect<P: AsRef<Path>>(path: P, handle: &::tokio_core::reactor::Handle) -> Box<Future<Item = Client, Error = ::std::io::Error>> {
+    pub fn connect<P: AsRef<Path>>(path: P, handle: &::tokio_core::reactor::Handle) -> Result<Client, ::std::io::Error> {
         use ::tokio_uds_proto::UnixClient;
-        let ret = UnixClient::new(LibvirtProto)
-                    .connect(path, handle)
-                    .map(|inner| Client { inner });
-        future::result(ret).boxed()
+        UnixClient::new(LibvirtProto)
+                .connect(path, handle)
+                .map(|inner| Client { inner })
+    }
+
+    pub fn auth(&self) -> <Self as Service>::Future {
+        use self::LibvirtRequest::*;
+        self.inner.call(AuthListRequest).boxed()
+    }
+
+    pub fn open(&self) -> <Self as Service>::Future {
+        use self::LibvirtRequest::*;
+        self.inner.call(ConnectOpenRequest).boxed()
+    }
+
+    pub fn version(&self) -> <Self as Service>::Future {
+        use self::LibvirtRequest::*;
+        self.inner.call(LibVersionRequest).boxed()
     }
 }
-
 
 impl Service for Client {
     type Request = LibvirtRequest;
@@ -188,17 +225,20 @@ impl Service for Client {
 #[test]
 fn such_async() {
     use ::tokio_core::reactor::Core;
-    use self::LibvirtRequest::*;
 
     let mut core = Core::new().unwrap();
     let handle = core.handle(); 
-    core.run(
-        Client::connect("/var/run/libvirt/libvirt-sock", &handle)
-            .and_then(|c| {
-                c.call(AuthListRequest).and_then(|resp| {
-                    println!("GOT RESP {:?}", resp);
-                    Ok(())
-                })
-            })
-    ).unwrap();
+    let client = Client::connect("/var/run/libvirt/libvirt-sock", &handle).unwrap();
+    let result = core.run({
+        client.auth()
+            .and_then(|_| client.open())
+            .and_then(|_| client.version())
+    }).unwrap();
+    println!("{:?}", result);
+    match result {
+        LibvirtResponse::LibVersionResponse(payload) => {
+            println!("version: {}", payload.version())
+        },
+        _ => unimplemented!(),
+    }
 }
