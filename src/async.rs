@@ -216,9 +216,9 @@ impl Client {
         self.request(request::remote_procedure::REMOTE_PROC_CONNECT_GET_LIB_VERSION, ())
     }
 
-    pub fn list(&self) -> ::futures::BoxFuture<request::ListDefinedDomainsResponse, LibvirtError> {
-        let payload = request::ListDefinedDomainsRequest::new();
-        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_DEFINED_DOMAINS, payload)
+    pub fn list(&self) -> ::futures::BoxFuture<request::ListAllDomainsResponse, LibvirtError> {
+        let payload = request::ListAllDomainsRequest::new(3);
+        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_DOMAINS, payload)
     }
 }
 

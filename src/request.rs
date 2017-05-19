@@ -289,3 +289,35 @@ impl DomainCreateResponse {
         Domain ((self.0).0.dom.clone())
     }
 }
+
+
+#[derive(Debug)]
+pub struct ListAllDomainsRequest(generated::remote_connect_list_all_domains_args);
+
+impl ListAllDomainsRequest {
+    pub fn new(flags: u32) -> Self {
+        let payload = generated::remote_connect_list_all_domains_args {
+            need_results: 1,
+            flags: flags,
+        };
+        ListAllDomainsRequest(payload)
+    }
+}
+
+delegate_pack_impl!(ListAllDomainsRequest);
+
+#[derive(Debug)]
+pub struct ListAllDomainsResponse(generated::remote_connect_list_all_domains_ret);
+
+impl ListAllDomainsResponse {
+    pub fn get_domains(&self) -> Vec<Domain> {
+        let mut domains = Vec::new();
+        for dom in &(self.0).domains {
+            domains.push(Domain(dom.clone()))
+        }
+        domains
+    }
+}
+
+delegate_unpack_impl!(ListAllDomainsResponse);
+

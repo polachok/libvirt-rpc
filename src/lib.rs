@@ -249,6 +249,7 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
 }
 #[cfg(test)]
 mod tests {
+    /*
     #[test]
     fn no_it_doesnt() {
         use std::fs::File;
@@ -278,6 +279,7 @@ mod tests {
         let names = libvirt.list_defined_domains();
         println!("domains: {:?}", names);
     }
+    */
     /*
     #[test]
     fn it_works() {
