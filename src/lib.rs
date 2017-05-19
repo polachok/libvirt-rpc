@@ -1,22 +1,28 @@
 extern crate xdr_codec;
 extern crate byteorder;
 extern crate uuid;
+extern crate tokio_io;
+extern crate tokio_proto;
+extern crate tokio_service;
+extern crate tokio_core;
+extern crate tokio_uds;
+extern crate tokio_uds_proto;
+extern crate bytes;
+#[macro_use]
+extern crate futures;
+extern crate log;
+extern crate env_logger;
+#[macro_use]
+extern crate bitflags;
 
-use xdr_codec::record::{XdrRecordWriter,XdrRecordReader};
 use xdr_codec::{Pack,Unpack};
-use std::io::{BufWriter,BufReader};
 
 use byteorder::NetworkEndian;
 
-mod request;
+pub mod request;
+pub mod async;
 use request::*;
 
-const VIR_UUID_BUFLEN: usize = 16;
-const ProcConnectGetLibVersion: i32 = 157;
-const ProcAuthList: i32 = 66;
-const ProcConnectOpen: i32 = 1;
-
-use std::os::unix::net::UnixStream;
 use std::io::Cursor;
 
 pub struct Libvirt<Io: ::std::io::Read+::std::io::Write> {
@@ -103,7 +109,7 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         use std::io::Cursor;
         use byteorder::WriteBytesExt;
 
-        let mut buf = Vec::new();
+        let buf = Vec::new();
         let (sz, buf) = {
             let mut c = Cursor::new(buf);
             let sz = try!(packet.pack(&mut c));
@@ -111,12 +117,13 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
             (sz, inner)
         };
         let len = sz + 4;
-        self.stream.write_u32::<NetworkEndian>(len as u32);
-        self.stream.write(&buf[0..sz]);
+        try!(self.stream.write_u32::<NetworkEndian>(len as u32));
+        try!(self.stream.write(&buf[0..sz]));
         //println!("LEN = {:?}\n", len);
         Ok(len as usize)
     }
 
+    /*
     fn read_packet_raw(&mut self) -> Result<Vec<u8>, LibvirtError> {
         use byteorder::ReadBytesExt;
 
@@ -138,6 +145,7 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         let (err, _) = try!(virNetMessageError::unpack(&mut cur));
         return Err(LibvirtError::from(err));
     }
+    */
 
     fn read_packet_reply<P: xdr_codec::Unpack<Cursor<Vec<u8>>>>(&mut self) -> Result<P, LibvirtError> {
         use byteorder::{ReadBytesExt};
@@ -150,7 +158,7 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         try!(self.stream.read_exact(&mut buf[0..len as usize]));
         let mut cur = Cursor::new(buf);
 
-        let (header, hlen) = try!(virNetMessageHeader::unpack(&mut cur));
+        let (header, _) = try!(virNetMessageHeader::unpack(&mut cur));
        
         if header.status == virNetMessageStatus::VIR_NET_OK {
             let (pkt, _) = try!(P::unpack(&mut cur));
@@ -166,34 +174,44 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         self.read_packet_reply()
     }
 
-    pub fn auth(&mut self) -> Result<AuthListResponse, LibvirtError> {
+    fn make_request<T>(&mut self, procedure: request::remote_procedure, payload: T) -> request::LibvirtMessage<T> {
+        use std::default::Default;
         let serial = self.serial();
-        self.request(AuthListRequest::new(serial))
+
+        LibvirtMessage {
+            header: request::virNetMessageHeader {
+                serial: serial,
+                proc_: procedure as i32,
+                ..Default::default()
+            },
+            payload: payload,
+        }
+    }
+
+    pub fn auth(&mut self) -> Result<AuthListResponse, LibvirtError> {
+        use request::remote_procedure::*;
+        let req = self.make_request(REMOTE_PROC_AUTH_LIST, AuthListRequest::new());
+        self.request(req)
     }
 
     pub fn open(&mut self) -> Result<ConnectOpenResponse, LibvirtError> {
-        let serial = self.serial();
-        self.request(ConnectOpenRequest::new(serial))
+        use request::remote_procedure::*;
+        let req = self.make_request(REMOTE_PROC_CONNECT_OPEN, ConnectOpenRequest::new());
+        self.request(req)
     }
 
     pub fn version(&mut self) -> Result<(u32, u32, u32), LibvirtError> {
-        let serial = self.serial();
+        use request::remote_procedure::*;
+        let req = self.make_request(REMOTE_PROC_CONNECT_GET_LIB_VERSION, GetLibVersionRequest::new());
 
-        let pkt: GetLibVersionResponse = try!(self.request(GetLibVersionRequest::new(serial)));
+        let pkt: GetLibVersionResponse = try!(self.request(req));
 
-        let mut version = pkt.version();
-        let major = version / 1000000;
-        version %= 1000000;
-        let minor = version / 1000;
-        version %= 1000;
-        let micro = version;
-
-        Ok((major as u32, minor as u32, micro as u32))
+        Ok(pkt.version())
     }
 
     pub fn list_defined_domains(&mut self) -> Result<Vec<String>, LibvirtError> {
-        let serial = self.serial();
-        let req = ListDefinedDomainsRequest::new(serial);
+        use request::remote_procedure::*;
+        let req = self.make_request(REMOTE_PROC_CONNECT_LIST_DEFINED_DOMAINS, ListDefinedDomainsRequest::new());
 
         let pkt: ListDefinedDomainsResponse = try!(self.request(req));
         let names = pkt.get_domain_names();
@@ -201,7 +219,8 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
     }
 
     pub fn define(&mut self, xml: &str) -> Result<Domain, LibvirtError> {
-        let req = DomainDefineXMLRequest::new(self.serial(), xml, 1);
+        use request::remote_procedure::*;
+        let req = self.make_request(REMOTE_PROC_DOMAIN_DEFINE_XML_FLAGS, DomainDefineXMLRequest::new(xml, 1));
 
         let pkt: DomainDefineXMLResponse = try!(self.request(req));
         let dom = pkt.get_domain();
@@ -209,22 +228,24 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
     }
 
     pub fn undefine(&mut self, dom: Domain) -> Result<DomainUndefineResponse, LibvirtError> {
-        let req = DomainUndefineRequest::new(self.serial(), dom, 0);
+        use request::remote_procedure::*;
+        let req = self.make_request(REMOTE_PROC_DOMAIN_UNDEFINE_FLAGS, DomainUndefineRequest::new(dom, 0));
 
         self.request(req)
     }
 
     pub fn start(&mut self, dom: Domain) -> Result<Domain, LibvirtError> {
-        let req = DomainCreateRequest::new(self.serial(), dom, 0);
+        use request::remote_procedure::*;
+        let req = self.make_request(REMOTE_PROC_DOMAIN_CREATE_WITH_FLAGS, DomainCreateRequest::new(dom, DomainCreateFlags::empty()));
 
         let pkt: DomainCreateResponse = try!(self.request(req));
         let dom = pkt.get_domain();
         Ok(dom)
     }
 }
-
 #[cfg(test)]
 mod tests {
+    /*
     #[test]
     fn no_it_doesnt() {
         use std::fs::File;
@@ -233,8 +254,11 @@ mod tests {
         use std::io::Read;
         let mut stream = UnixStream::connect("/var/run/libvirt/libvirt-sock").unwrap();
         let mut libvirt = Libvirt::new(stream);
+        println!("authorizing");
         libvirt.auth().unwrap();
+        println!("opening");
         libvirt.open().unwrap();
+        println!("getting version");
         let (major, minor, micro) = libvirt.version().unwrap();
         println!("version: {}.{}.{}", major, minor, micro);
         let names = libvirt.list_defined_domains();
@@ -251,6 +275,7 @@ mod tests {
         let names = libvirt.list_defined_domains();
         println!("domains: {:?}", names);
     }
+    */
     /*
     #[test]
     fn it_works() {
