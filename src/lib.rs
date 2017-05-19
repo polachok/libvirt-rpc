@@ -7,9 +7,12 @@ extern crate tokio_service;
 extern crate tokio_core;
 extern crate tokio_uds;
 extern crate tokio_uds_proto;
+extern crate tokio_serde;
 extern crate bytes;
 #[macro_use]
 extern crate futures;
+extern crate log;
+extern crate env_logger;
 
 use xdr_codec::record::{XdrRecordWriter,XdrRecordReader};
 use xdr_codec::{Pack,Unpack};
@@ -234,6 +237,7 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
 }
 #[cfg(test)]
 mod tests {
+        /*
     #[test]
     fn no_it_doesnt() {
         use std::fs::File;
@@ -243,7 +247,6 @@ mod tests {
         let mut stream = UnixStream::connect("/var/run/libvirt/libvirt-sock").unwrap();
         let mut libvirt = Libvirt::new(stream);
         libvirt.auth().unwrap();
-        /*
         libvirt.open().unwrap();
         let (major, minor, micro) = libvirt.version().unwrap();
         println!("version: {}.{}.{}", major, minor, micro);
@@ -260,8 +263,8 @@ mod tests {
         //libvirt.undefine(dom).unwrap();
         let names = libvirt.list_defined_domains();
         println!("domains: {:?}", names);
-        */
     }
+        */
     /*
     #[test]
     fn it_works() {

@@ -1,7 +1,8 @@
 use std::io::Cursor;
 use std::path::Path;
+use std::marker::PhantomData;
 use ::xdr_codec::{Pack,Unpack};
-use ::bytes::{BufMut,BytesMut,BigEndian};
+use ::bytes::{BufMut, Bytes, BytesMut, BigEndian};
 use ::tokio_io::codec;
 use ::tokio_io::{AsyncRead,AsyncWrite};
 use ::tokio_io::codec::length_delimited;
@@ -10,21 +11,25 @@ use ::tokio_service::Service;
 use ::request;
 use ::LibvirtError;
 use ::futures::{Stream, Sink, Poll, StartSend, Future, future};
-
-type LibvirtFrame<T> = (RequestId, T);
+use ::env_logger;
 
 pub struct LibvirtCodec;
 
 #[derive(Debug)]
-pub enum LibvirtMessage {
+pub enum LibvirtRequest {
     AuthListRequest,
 }
 
-impl LibvirtMessage {
+#[derive(Debug)]
+pub enum LibvirtResponse {
+    AuthListResponse(request::AuthListResponse),
+}
+
+impl LibvirtRequest {
     fn encode(&self, serial: RequestId, buf: &mut BytesMut) -> Result<(), LibvirtError> {
         let mut writer = buf.writer();
         match self {
-                &self::LibvirtMessage::AuthListRequest => {
+                &self::LibvirtRequest::AuthListRequest => {
                     let packet = request::AuthListRequest::new(serial as u32);
                     try!(packet.pack(&mut writer));
                 },
@@ -33,28 +38,41 @@ impl LibvirtMessage {
     }
 }
 
+impl LibvirtResponse {
+    fn decode<R: ::std::io::Read>(proc_: i32, mut reader: R) -> Result<Self, LibvirtError> {
+        let req = match proc_ {
+            request::ProcAuthList => {
+                let (req, _) = try!(request::AuthListResponse::unpack(&mut reader));
+                LibvirtResponse::AuthListResponse(req)
+            },
+            _ => unimplemented!(),
+        };
+        Ok(req)
+    }
+}
+
 impl codec::Encoder for LibvirtCodec {
-    type Item = (RequestId, LibvirtMessage);
+    type Item = (RequestId, LibvirtRequest);
     type Error = ::std::io::Error; //LibvirtError;
 
-    fn encode(&mut self, msg: (RequestId, LibvirtMessage), buf: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, msg: (RequestId, LibvirtRequest), buf: &mut BytesMut) -> Result<(), Self::Error> {
         use ::std::io::ErrorKind;
-        msg.1.encode(msg.0, buf).map_err(|e| ::std::io::Error::new(ErrorKind::InvalidInput, "fuck"))
+        msg.1.encode(msg.0, buf).map_err(|e| ::std::io::Error::new(ErrorKind::InvalidInput, e.to_string()))
     }
 }
 
 impl codec::Decoder for LibvirtCodec {
-    type Item = (RequestId, LibvirtMessage);
+    type Item = (RequestId, LibvirtResponse);
     type Error = ::std::io::Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         use ::std::io::ErrorKind;
-        println!("DECODING");
         let mut reader = Cursor::new(buf);
-        let (header, hlen) = try!(request::virNetMessageHeader::unpack(&mut reader)
+        let (header, _) = try!(request::virNetMessageHeader::unpack(&mut reader)
                                     .map_err(|e| ::std::io::Error::new(ErrorKind::InvalidInput, "fuck")));
-        println!("Header: {:?}", header);
-        unimplemented!()
+        let resp = try!(LibvirtResponse::decode(header.proc_, &mut reader)
+                                    .map_err(|e| ::std::io::Error::new(ErrorKind::InvalidInput, "fuck")));
+        Ok(Some((header.serial as RequestId, resp)))
     }
 }
 
@@ -126,8 +144,8 @@ type LibvirtTransport<T> = FramedTransport<T, LibvirtCodec>;
 struct LibvirtProto;
 
 impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWrite + 'static {
-    type Request = LibvirtMessage;
-    type Response = LibvirtMessage;
+    type Request = LibvirtRequest;
+    type Response = LibvirtResponse;
     type Transport = LibvirtTransport<T>;
     type BindTransport = Result<Self::Transport, ::std::io::Error>;
     fn bind_transport(&self, io: T) -> Self::BindTransport {
@@ -155,9 +173,10 @@ impl Client {
     }
 }
 
+
 impl Service for Client {
-    type Request = LibvirtMessage;
-    type Response = LibvirtMessage;
+    type Request = LibvirtRequest;
+    type Response = LibvirtResponse;
     type Error = ::std::io::Error;
     type Future = ::futures::BoxFuture<Self::Response, Self::Error>;
 
@@ -169,11 +188,17 @@ impl Service for Client {
 #[test]
 fn such_async() {
     use ::tokio_core::reactor::Core;
+    use self::LibvirtRequest::*;
 
     let mut core = Core::new().unwrap();
     let handle = core.handle(); 
     core.run(
         Client::connect("/var/run/libvirt/libvirt-sock", &handle)
-            .and_then(|c| c.call(LibvirtMessage::AuthListRequest))
+            .and_then(|c| {
+                c.call(AuthListRequest).and_then(|resp| {
+                    println!("GOT RESP {:?}", resp);
+                    Ok(())
+                })
+            })
     ).unwrap();
 }

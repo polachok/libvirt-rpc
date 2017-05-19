@@ -4,13 +4,13 @@ use std::convert::From;
 use std::default::Default;
 
 
-const ProcConnectListDefinedDomains: i32 = 21;
-const ProcConnectGetLibVersion: i32 = 157;
-const ProcAuthList: i32 = 66;
-const ProcConnectOpen: i32 = 1;
-const ProcDomainCreateWithFlags: i32 = 196;
-const ProcDomainUndefineFlags: i32 = 231;
-const ProcDomainDefineXMLFlags: i32 = 350;
+pub const ProcConnectListDefinedDomains: i32 = 21;
+pub const ProcConnectGetLibVersion: i32 = 157;
+pub const ProcAuthList: i32 = 66;
+pub const ProcConnectOpen: i32 = 1;
+pub const ProcDomainCreateWithFlags: i32 = 196;
+pub const ProcDomainUndefineFlags: i32 = 231;
+pub const ProcDomainDefineXMLFlags: i32 = 350;
 
 mod generated {
     #![allow(non_camel_case_types)]
