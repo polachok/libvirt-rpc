@@ -50,12 +50,12 @@ impl ::std::default::Default for generated::virNetMessageHeader {
 }
 
 #[derive(Debug)]
-pub struct LibvirtRequest<P> {
-    header: generated::virNetMessageHeader,
-    payload: P,
+pub struct LibvirtMessage<P> {
+    pub header: generated::virNetMessageHeader,
+    pub payload: P,
 }
 
-impl<P: xdr_codec::Pack<Out>, Out: xdr_codec::Write> Pack<Out> for LibvirtRequest<P> {
+impl<P: xdr_codec::Pack<Out>, Out: xdr_codec::Write> Pack<Out> for LibvirtMessage<P> {
     fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
         let mut sz: usize = 0;
         sz += try!(self.header.pack(out));
@@ -108,20 +108,11 @@ macro_rules! delegate_unpack_impl {
 
 /// Auth list request must be the first request
 #[derive(Debug)]
-pub struct AuthListRequest(LibvirtRequest<()>);
+pub struct AuthListRequest(());
 
 impl AuthListRequest {
-    pub fn new(serial: u32) -> Self {
-        let header = generated::virNetMessageHeader {
-            proc_: remote_procedure::REMOTE_PROC_AUTH_LIST as i32,
-            serial: serial,
-            ..Default::default()
-        };
-
-        AuthListRequest(LibvirtRequest {
-            header: header, 
-            payload: (),
-        })
+    pub fn new() -> Self {
+        AuthListRequest(())
     }
 }
 
@@ -133,25 +124,16 @@ delegate_unpack_impl!(AuthListResponse);
 
 /// Connect open request
 #[derive(Debug)]
-pub struct ConnectOpenRequest(LibvirtRequest<generated::remote_connect_open_args>);
+pub struct ConnectOpenRequest(generated::remote_connect_open_args);
 
 impl ConnectOpenRequest {
-    pub fn new(serial: u32) -> Self {
-        let header = generated::virNetMessageHeader {
-            proc_: remote_procedure::REMOTE_PROC_CONNECT_OPEN as i32,
-            serial: serial,
-            ..Default::default()
-        };
-
+    pub fn new() -> Self {
         let payload = generated::remote_connect_open_args {
             name: Some(generated::remote_nonnull_string("qemu:///system".to_string())),
             flags: 0,
         };
 
-        ConnectOpenRequest(LibvirtRequest {
-            header: header, 
-            payload: payload,
-        })
+        ConnectOpenRequest(payload)
     }
 }
 
@@ -162,46 +144,44 @@ pub struct ConnectOpenResponse(LibvirtResponse<()>);
 delegate_unpack_impl!(ConnectOpenResponse);
 
 #[derive(Debug)]
-pub struct GetLibVersionRequest(LibvirtRequest<()>);
+pub struct GetLibVersionRequest(());
 
 impl GetLibVersionRequest {
-    pub fn new(serial: u32) -> Self {
-        let h = generated::virNetMessageHeader {
-            proc_: remote_procedure::REMOTE_PROC_CONNECT_GET_LIB_VERSION as i32,
-            serial: serial,
-            ..Default::default()
-        };
-        GetLibVersionRequest(LibvirtRequest { header: h, payload: () })
+    pub fn new() -> Self {
+        GetLibVersionRequest(())
     }
 }
 
 delegate_pack_impl!(GetLibVersionRequest);
 
 #[derive(Debug)]
-pub struct GetLibVersionResponse(LibvirtResponse<u64>);
+pub struct GetLibVersionResponse(LibvirtResponse<generated::remote_connect_get_lib_version_ret>);
 
 impl GetLibVersionResponse {
-    pub fn version(&self) -> u64 {
-        (self.0).0
+    pub fn version(&self) -> (u32, u32, u32) {
+        let mut version = (self.0).0.lib_ver;
+
+        let major = version / 1000000;
+        version %= 1000000;
+        let minor = version / 1000;
+        version %= 1000;
+        let micro = version;
+
+        (major as u32, minor as u32, micro as u32)
     }
 }
 
 delegate_unpack_impl!(GetLibVersionResponse);
 
 #[derive(Debug)]
-pub struct ListDefinedDomainsRequest(LibvirtRequest<generated::remote_connect_list_defined_domains_args>);
+pub struct ListDefinedDomainsRequest(generated::remote_connect_list_defined_domains_args);
 
 impl ListDefinedDomainsRequest {
-    pub fn new(serial: u32) -> Self {
-        let header = generated::virNetMessageHeader {
-            proc_: remote_procedure::REMOTE_PROC_CONNECT_LIST_DEFINED_DOMAINS as i32,
-            serial: serial,
-            ..Default::default()
-        };
+    pub fn new() -> Self {
         let payload = generated::remote_connect_list_defined_domains_args {
             maxnames: generated::REMOTE_DOMAIN_LIST_MAX as i32,
         };
-        ListDefinedDomainsRequest(LibvirtRequest { header, payload })
+        ListDefinedDomainsRequest(payload)
     }
 }
 
@@ -223,21 +203,20 @@ impl ListDefinedDomainsResponse {
 delegate_unpack_impl!(ListDefinedDomainsResponse);
 
 #[derive(Debug)]
-pub struct DomainDefineXMLRequest(LibvirtRequest<generated::remote_domain_define_xml_flags_args>);
+pub struct DomainDefineXMLRequest(generated::remote_domain_define_xml_flags_args);
 
 impl DomainDefineXMLRequest {
-    pub fn new(serial: u32, xml: &str, flags: u32) -> Self {
+    pub fn new(xml: &str, flags: u32) -> Self {
         // XXX: use bitflags for flags
         let header = generated::virNetMessageHeader {
             proc_: remote_procedure::REMOTE_PROC_DOMAIN_DEFINE_XML_FLAGS as i32,
-            serial: serial,
             ..Default::default()
         };
         let payload = generated::remote_domain_define_xml_flags_args {
             xml: generated::remote_nonnull_string(xml.to_string()),
             flags: flags,
         };
-        DomainDefineXMLRequest(LibvirtRequest { header, payload })
+        DomainDefineXMLRequest(payload)
     }
 }
 
@@ -255,14 +234,13 @@ impl DomainDefineXMLResponse {
 delegate_unpack_impl!(DomainDefineXMLResponse);
 
 #[derive(Debug)]
-pub struct DomainUndefineRequest(LibvirtRequest<generated::remote_domain_undefine_flags_args>);
+pub struct DomainUndefineRequest(generated::remote_domain_undefine_flags_args);
 
 impl DomainUndefineRequest {
-    pub fn new(serial: u32, domain: Domain, flags: u32) -> Self {
+    pub fn new(domain: Domain, flags: u32) -> Self {
         // XXX: use bitflags for flags
         let header = generated::virNetMessageHeader {
             proc_: remote_procedure::REMOTE_PROC_DOMAIN_UNDEFINE_FLAGS as i32,
-            serial: serial,
             ..Default::default()
         };
 
@@ -270,7 +248,7 @@ impl DomainUndefineRequest {
             dom: domain.0,
             flags: flags,
         };
-        DomainUndefineRequest(LibvirtRequest { header, payload })
+        DomainUndefineRequest(payload)
     }
 }
 
@@ -281,14 +259,13 @@ pub struct DomainUndefineResponse(LibvirtResponse<()>);
 delegate_unpack_impl!(DomainUndefineResponse);
 
 #[derive(Debug)]
-pub struct DomainCreateRequest(LibvirtRequest<generated::remote_domain_create_with_flags_args>);
+pub struct DomainCreateRequest(generated::remote_domain_create_with_flags_args);
 
 impl DomainCreateRequest {
-    pub fn new(serial: u32, domain: Domain, flags: u32) -> Self {
+    pub fn new(domain: Domain, flags: u32) -> Self {
         // XXX: use bitflags for flags
         let header = generated::virNetMessageHeader {
             proc_: remote_procedure::REMOTE_PROC_DOMAIN_CREATE_WITH_FLAGS as i32,
-            serial: serial,
             ..Default::default()
         };
 
@@ -296,7 +273,7 @@ impl DomainCreateRequest {
             dom: domain.0,
             flags: flags,
         };
-        DomainCreateRequest(LibvirtRequest { header, payload })
+        DomainCreateRequest(payload)
     }
 }
 

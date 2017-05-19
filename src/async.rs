@@ -208,17 +208,17 @@ impl Client {
     }
 
     pub fn open(&self) -> ::futures::BoxFuture<request::ConnectOpenResponse, LibvirtError> {
-        use request::generated;
-        let pl = generated::remote_connect_open_args {
-            name: Some(generated::remote_nonnull_string("qemu:///system".to_string())),
-            flags: 0,
-        };
-
+        let pl = request::ConnectOpenRequest::new();
         self.request(request::remote_procedure::REMOTE_PROC_CONNECT_OPEN, pl)
     }
 
     pub fn version(&self) -> ::futures::BoxFuture<request::GetLibVersionResponse, LibvirtError> {
         self.request(request::remote_procedure::REMOTE_PROC_CONNECT_GET_LIB_VERSION, ())
+    }
+
+    pub fn list(&self) -> ::futures::BoxFuture<request::ListDefinedDomainsResponse, LibvirtError> {
+        let payload = request::ListDefinedDomainsRequest::new();
+        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_DEFINED_DOMAINS, payload)
     }
 }
 
@@ -244,6 +244,7 @@ fn such_async() {
         client.auth()
             .and_then(|_| client.open())
             .and_then(|_| client.version())
+            .and_then(|_| client.list())
     }).unwrap();
     println!("{:?}", result);
 }
