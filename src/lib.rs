@@ -7,7 +7,6 @@ extern crate tokio_service;
 extern crate tokio_core;
 extern crate tokio_uds;
 extern crate tokio_uds_proto;
-extern crate tokio_serde;
 extern crate bytes;
 #[macro_use]
 extern crate futures;
