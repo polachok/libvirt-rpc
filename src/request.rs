@@ -8,15 +8,11 @@ pub mod generated {
     #![allow(dead_code)]
     #![allow(non_snake_case)]
     #![allow(unused_assignments)]
-    const VIR_UUID_BUFLEN: usize = 16;
     use ::xdr_codec;
     use xdr_codec::{Pack,Unpack};
 
     include!(concat!(env!("OUT_DIR"), "/virnetprotocol_xdr.rs"));
     include!(concat!(env!("OUT_DIR"), "/remote_protocol_xdr.rs"));
-
-    // Work around a problem with xdrgen
-    impl Copy for remote_uuid { }
 }
 
 pub use self::generated::remote_procedure;
@@ -258,20 +254,24 @@ delegate_pack_impl!(DomainUndefineRequest);
 pub struct DomainUndefineResponse(LibvirtResponse<()>);
 delegate_unpack_impl!(DomainUndefineResponse);
 
+bitflags! {
+    pub flags DomainCreateFlags: u32 {
+        const VIR_DOMAIN_START_PAUSED = 1,
+        const VIR_DOMAIN_START_AUTODESTROY = 2,
+        const VIR_DOMAIN_START_BYPASS_CACHE = 4,
+        const VIR_DOMAIN_START_FORCE_BOOT = 8,
+        const VIR_DOMAIN_START_VALIDATE = 16,
+    }
+}
+
 #[derive(Debug)]
 pub struct DomainCreateRequest(generated::remote_domain_create_with_flags_args);
 
 impl DomainCreateRequest {
-    pub fn new(domain: Domain, flags: u32) -> Self {
-        // XXX: use bitflags for flags
-        let header = generated::virNetMessageHeader {
-            proc_: remote_procedure::REMOTE_PROC_DOMAIN_CREATE_WITH_FLAGS as i32,
-            ..Default::default()
-        };
-
+    pub fn new(domain: Domain, flags: DomainCreateFlags) -> Self {
         let payload = generated::remote_domain_create_with_flags_args {
             dom: domain.0,
-            flags: flags,
+            flags: flags.bits(),
         };
         DomainCreateRequest(payload)
     }

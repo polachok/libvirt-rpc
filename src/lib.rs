@@ -12,6 +12,8 @@ extern crate bytes;
 extern crate futures;
 extern crate log;
 extern crate env_logger;
+#[macro_use]
+extern crate bitflags;
 
 use xdr_codec::record::{XdrRecordWriter,XdrRecordReader};
 use xdr_codec::{Pack,Unpack};
@@ -240,7 +242,7 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
 
     pub fn start(&mut self, dom: Domain) -> Result<Domain, LibvirtError> {
         use request::remote_procedure::*;
-        let req = self.make_request(REMOTE_PROC_DOMAIN_CREATE_WITH_FLAGS, DomainCreateRequest::new(dom, 0));
+        let req = self.make_request(REMOTE_PROC_DOMAIN_CREATE_WITH_FLAGS, DomainCreateRequest::new(dom, DomainCreateFlags::empty()));
 
         let pkt: DomainCreateResponse = try!(self.request(req));
         let dom = pkt.get_domain();

@@ -21,6 +21,7 @@ tokio-uds-proto = "0.1"
 bytes = "0.4"
 log = "0.3.7"
 env_logger = "0.4"
+bitflags = "0.8.2"
 
 [replace]
 "tokio-io:0.1.1" = { git = "https://github.com/tokio-rs/tokio-io" }
