@@ -3,15 +3,6 @@ use xdr_codec::{Pack,Unpack};
 use std::convert::From;
 use std::default::Default;
 
-
-pub const ProcConnectListDefinedDomains: i32 = 21;
-pub const ProcConnectGetLibVersion: i32 = 157;
-pub const ProcAuthList: i32 = 66;
-pub const ProcConnectOpen: i32 = 1;
-pub const ProcDomainCreateWithFlags: i32 = 196;
-pub const ProcDomainUndefineFlags: i32 = 231;
-pub const ProcDomainDefineXMLFlags: i32 = 350;
-
 mod generated {
     #![allow(non_camel_case_types)]
     #![allow(dead_code)]
@@ -28,6 +19,7 @@ mod generated {
     impl Copy for remote_uuid { }
 }
 
+pub use self::generated::remote_procedure;
 pub use self::generated::{virNetMessageStatus,virNetMessageHeader,virNetMessageError};
 
 #[derive(Debug)]
@@ -121,7 +113,7 @@ pub struct AuthListRequest(LibvirtRequest<()>);
 impl AuthListRequest {
     pub fn new(serial: u32) -> Self {
         let header = generated::virNetMessageHeader {
-            proc_: ProcAuthList,
+            proc_: remote_procedure::REMOTE_PROC_AUTH_LIST as i32,
             serial: serial,
             ..Default::default()
         };
@@ -146,7 +138,7 @@ pub struct ConnectOpenRequest(LibvirtRequest<generated::remote_connect_open_args
 impl ConnectOpenRequest {
     pub fn new(serial: u32) -> Self {
         let header = generated::virNetMessageHeader {
-            proc_: ProcConnectOpen,
+            proc_: remote_procedure::REMOTE_PROC_CONNECT_OPEN as i32,
             serial: serial,
             ..Default::default()
         };
@@ -175,7 +167,7 @@ pub struct GetLibVersionRequest(LibvirtRequest<()>);
 impl GetLibVersionRequest {
     pub fn new(serial: u32) -> Self {
         let h = generated::virNetMessageHeader {
-            proc_: ProcConnectGetLibVersion,
+            proc_: remote_procedure::REMOTE_PROC_CONNECT_GET_LIB_VERSION as i32,
             serial: serial,
             ..Default::default()
         };
@@ -202,7 +194,7 @@ pub struct ListDefinedDomainsRequest(LibvirtRequest<generated::remote_connect_li
 impl ListDefinedDomainsRequest {
     pub fn new(serial: u32) -> Self {
         let header = generated::virNetMessageHeader {
-            proc_: ProcConnectListDefinedDomains,
+            proc_: remote_procedure::REMOTE_PROC_CONNECT_LIST_DEFINED_DOMAINS as i32,
             serial: serial,
             ..Default::default()
         };
@@ -237,7 +229,7 @@ impl DomainDefineXMLRequest {
     pub fn new(serial: u32, xml: &str, flags: u32) -> Self {
         // XXX: use bitflags for flags
         let header = generated::virNetMessageHeader {
-            proc_: ProcDomainDefineXMLFlags,
+            proc_: remote_procedure::REMOTE_PROC_DOMAIN_DEFINE_XML_FLAGS as i32,
             serial: serial,
             ..Default::default()
         };
@@ -269,7 +261,7 @@ impl DomainUndefineRequest {
     pub fn new(serial: u32, domain: Domain, flags: u32) -> Self {
         // XXX: use bitflags for flags
         let header = generated::virNetMessageHeader {
-            proc_: ProcDomainUndefineFlags,
+            proc_: remote_procedure::REMOTE_PROC_DOMAIN_UNDEFINE_FLAGS as i32,
             serial: serial,
             ..Default::default()
         };
@@ -295,7 +287,7 @@ impl DomainCreateRequest {
     pub fn new(serial: u32, domain: Domain, flags: u32) -> Self {
         // XXX: use bitflags for flags
         let header = generated::virNetMessageHeader {
-            proc_: ProcDomainCreateWithFlags,
+            proc_: remote_procedure::REMOTE_PROC_DOMAIN_CREATE_WITH_FLAGS as i32,
             serial: serial,
             ..Default::default()
         };
