@@ -15,22 +15,14 @@ extern crate env_logger;
 #[macro_use]
 extern crate bitflags;
 
-use xdr_codec::record::{XdrRecordWriter,XdrRecordReader};
 use xdr_codec::{Pack,Unpack};
-use std::io::{BufWriter,BufReader};
 
 use byteorder::NetworkEndian;
 
-mod request;
-mod async;
+pub mod request;
+pub mod async;
 use request::*;
 
-const VIR_UUID_BUFLEN: usize = 16;
-const ProcConnectGetLibVersion: i32 = 157;
-const ProcAuthList: i32 = 66;
-const ProcConnectOpen: i32 = 1;
-
-use std::os::unix::net::UnixStream;
 use std::io::Cursor;
 
 pub struct Libvirt<Io: ::std::io::Read+::std::io::Write> {
@@ -117,7 +109,7 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         use std::io::Cursor;
         use byteorder::WriteBytesExt;
 
-        let mut buf = Vec::new();
+        let buf = Vec::new();
         let (sz, buf) = {
             let mut c = Cursor::new(buf);
             let sz = try!(packet.pack(&mut c));
@@ -125,12 +117,13 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
             (sz, inner)
         };
         let len = sz + 4;
-        self.stream.write_u32::<NetworkEndian>(len as u32);
-        self.stream.write(&buf[0..sz]);
+        try!(self.stream.write_u32::<NetworkEndian>(len as u32));
+        try!(self.stream.write(&buf[0..sz]));
         //println!("LEN = {:?}\n", len);
         Ok(len as usize)
     }
 
+    /*
     fn read_packet_raw(&mut self) -> Result<Vec<u8>, LibvirtError> {
         use byteorder::ReadBytesExt;
 
@@ -152,6 +145,7 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         let (err, _) = try!(virNetMessageError::unpack(&mut cur));
         return Err(LibvirtError::from(err));
     }
+    */
 
     fn read_packet_reply<P: xdr_codec::Unpack<Cursor<Vec<u8>>>>(&mut self) -> Result<P, LibvirtError> {
         use byteorder::{ReadBytesExt};
@@ -164,7 +158,7 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         try!(self.stream.read_exact(&mut buf[0..len as usize]));
         let mut cur = Cursor::new(buf);
 
-        let (header, hlen) = try!(virNetMessageHeader::unpack(&mut cur));
+        let (header, _) = try!(virNetMessageHeader::unpack(&mut cur));
        
         if header.status == virNetMessageStatus::VIR_NET_OK {
             let (pkt, _) = try!(P::unpack(&mut cur));

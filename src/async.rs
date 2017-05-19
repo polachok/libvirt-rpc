@@ -1,17 +1,16 @@
+//! This module provides tokio based async interface to libvirt API
 use std::io::Cursor;
 use std::path::Path;
-use std::marker::PhantomData;
 use ::xdr_codec::{Pack,Unpack};
-use ::bytes::{BufMut, Bytes, BytesMut, BigEndian};
+use ::bytes::{BufMut, BytesMut};
 use ::tokio_io::codec;
-use ::tokio_io::{AsyncRead,AsyncWrite};
+use ::tokio_io::{AsyncRead, AsyncWrite};
 use ::tokio_io::codec::length_delimited;
-use ::tokio_proto::multiplex::{self,RequestId};
+use ::tokio_proto::multiplex::{self, RequestId};
 use ::tokio_service::Service;
 use ::request;
 use ::LibvirtError;
 use ::futures::{Stream, Sink, Poll, StartSend, Future, future};
-use ::env_logger;
 
 pub struct LibvirtCodec;
 
@@ -29,7 +28,7 @@ pub struct LibvirtResponse {
 
 impl codec::Encoder for LibvirtCodec {
     type Item = (RequestId, LibvirtRequest);
-    type Error = ::std::io::Error; //LibvirtError;
+    type Error = ::std::io::Error;
 
     fn encode(&mut self, msg: (RequestId, LibvirtRequest), buf: &mut BytesMut) -> Result<(), Self::Error> {
         use ::std::io::ErrorKind;
@@ -148,11 +147,13 @@ impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWri
     }
 }
 
+/// Libvirt client
 pub struct Client {
     inner: multiplex::ClientService<::tokio_uds::UnixStream, LibvirtProto>,
 }
 
 impl Client {
+    /// opens libvirt connection over unix socket
     pub fn connect<P: AsRef<Path>>(path: P, handle: &::tokio_core::reactor::Handle) -> Result<Client, ::std::io::Error> {
         use ::tokio_uds_proto::UnixClient;
         UnixClient::new(LibvirtProto)
@@ -161,7 +162,7 @@ impl Client {
     }
 
     fn pack<P: Pack<::bytes::Writer<::bytes::BytesMut>>>(procedure: request::remote_procedure, payload: P) -> Result<LibvirtRequest, ::xdr_codec::Error> {
-        let mut buf = BytesMut::with_capacity(100);
+        let buf = BytesMut::with_capacity(100);
         let buf = {
             let mut writer = buf.writer();
             try!(payload.pack(&mut writer));
@@ -207,11 +208,13 @@ impl Client {
         self.request(request::remote_procedure::REMOTE_PROC_AUTH_LIST, ())
     }
 
+    /// opens up a read-write connection to the system qemu hypervisor driver
     pub fn open(&self) -> ::futures::BoxFuture<request::ConnectOpenResponse, LibvirtError> {
         let pl = request::ConnectOpenRequest::new();
         self.request(request::remote_procedure::REMOTE_PROC_CONNECT_OPEN, pl)
     }
 
+    /// can be used to obtain the version of the libvirt software in use on the host
     pub fn version(&self) -> ::futures::BoxFuture<request::GetLibVersionResponse, LibvirtError> {
         self.request(request::remote_procedure::REMOTE_PROC_CONNECT_GET_LIB_VERSION, ())
     }

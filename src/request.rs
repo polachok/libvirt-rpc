@@ -4,6 +4,8 @@ use std::convert::From;
 use std::default::Default;
 
 pub mod generated {
+    //! This module is generated from protocol files
+    //! It follows original naming convention
     #![allow(non_camel_case_types)]
     #![allow(dead_code)]
     #![allow(non_snake_case)]
@@ -18,14 +20,22 @@ pub mod generated {
 pub use self::generated::remote_procedure;
 pub use self::generated::{virNetMessageStatus,virNetMessageHeader,virNetMessageError};
 
+/// VM instance
 #[derive(Debug)]
 pub struct Domain(generated::remote_nonnull_domain);
 
 impl Domain {
+    /// positive integer, unique amongst running guest domains on a single host. An inactive domain does not have an ID.
+    pub fn id(&self) -> i32 {
+        self.0.id
+    }
+
+    /// short string, unique amongst all guest domains on a single host, both running and inactive.
     pub fn name(&self) -> String {
         self.0.name.0.clone()
     }
 
+    /// guaranteed to be unique amongst all guest domains on any host.
     pub fn uuid(&self) -> ::uuid::Uuid {
         let bytes = self.0.uuid.0;
         ::uuid::Uuid::from_bytes(&bytes).unwrap()
@@ -94,13 +104,11 @@ macro_rules! delegate_unpack_impl {
                 let mut pkt: $t = unsafe { ::std::mem::zeroed() };
                 pkt.0 = inner;
                 Ok((pkt, len))
-                //Ok((From::from(inner), len))
             }
         }
 
     }
 }
-
 
 /// Auth list request must be the first request
 #[derive(Debug)]
@@ -203,11 +211,6 @@ pub struct DomainDefineXMLRequest(generated::remote_domain_define_xml_flags_args
 
 impl DomainDefineXMLRequest {
     pub fn new(xml: &str, flags: u32) -> Self {
-        // XXX: use bitflags for flags
-        let header = generated::virNetMessageHeader {
-            proc_: remote_procedure::REMOTE_PROC_DOMAIN_DEFINE_XML_FLAGS as i32,
-            ..Default::default()
-        };
         let payload = generated::remote_domain_define_xml_flags_args {
             xml: generated::remote_nonnull_string(xml.to_string()),
             flags: flags,
@@ -235,11 +238,6 @@ pub struct DomainUndefineRequest(generated::remote_domain_undefine_flags_args);
 impl DomainUndefineRequest {
     pub fn new(domain: Domain, flags: u32) -> Self {
         // XXX: use bitflags for flags
-        let header = generated::virNetMessageHeader {
-            proc_: remote_procedure::REMOTE_PROC_DOMAIN_UNDEFINE_FLAGS as i32,
-            ..Default::default()
-        };
-
         let payload = generated::remote_domain_undefine_flags_args {
             dom: domain.0,
             flags: flags,
