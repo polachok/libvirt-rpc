@@ -355,6 +355,28 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for ListAllDomainsRequest {
 }
 
 #[derive(Debug)]
+pub struct DomainEventRegisterAnyRequest(generated::remote_connect_domain_event_register_any_args);
+
+impl DomainEventRegisterAnyRequest {
+    pub fn new(event: i32) -> Self {
+        let payload = generated::remote_connect_domain_event_register_any_args {
+            eventID: event,
+        };
+        DomainEventRegisterAnyRequest(payload)
+    }
+}
+
+delegate_pack_impl!(DomainEventRegisterAnyRequest);
+
+#[derive(Debug)]
+pub struct DomainEventRegisterAnyResponse(());
+delegate_unpack_impl!(DomainEventRegisterAnyResponse);
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainEventRegisterAnyRequest {
+    type Response = DomainEventRegisterAnyResponse;
+}
+
+#[derive(Debug)]
 pub struct DomainEventCallbackRegisterAnyRequest(generated::remote_connect_domain_event_callback_register_any_args);
 
 impl DomainEventCallbackRegisterAnyRequest {
@@ -373,6 +395,12 @@ delegate_pack_impl!(DomainEventCallbackRegisterAnyRequest);
 pub struct DomainEventCallbackRegisterAnyResponse(generated::remote_connect_domain_event_callback_register_any_ret);
 
 delegate_unpack_impl!(DomainEventCallbackRegisterAnyResponse);
+
+impl DomainEventCallbackRegisterAnyResponse {
+    pub fn callback_id(&self) -> i32 {
+        self.0.callbackID
+    }
+}
 
 impl<R: ::std::io::Read> LibvirtRpc<R> for DomainEventCallbackRegisterAnyRequest {
     type Response = DomainEventCallbackRegisterAnyResponse;
