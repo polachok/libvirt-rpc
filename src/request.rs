@@ -434,3 +434,26 @@ delegate_unpack_impl!(DomainLookupByUuidResponse);
 impl<R: ::std::io::Read> LibvirtRpc<R> for DomainLookupByUuidRequest {
     type Response = DomainLookupByUuidResponse;
 }
+
+/* virDomainEventType: http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventType */
+#[derive(Debug)]
+enum DomainEventType {
+    Defined = 0,
+    Undefined = 1,
+    Started = 2,
+    Suspended = 3,
+    Resumed = 4,
+    Stopped = 5,
+    Shutdown = 6,
+    PmSuspended = 7,
+    Crashed = 8,
+}
+
+#[derive(Debug)]
+enum EventStartedDetailType {
+    Booted = 0,
+    Migrated = 1,
+    Restored = 2,
+    FromSnapshot = 3,
+    Wakeup = 4,
+}

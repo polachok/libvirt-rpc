@@ -135,6 +135,35 @@ struct LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<LibvirtResponse>>>>,
 }
 
+impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
+    fn read_event(&self, resp: &LibvirtResponse) -> bool {
+        let procedure = unsafe { ::std::mem::transmute(resp.header.proc_ as u16) };
+        match procedure {
+            request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE => {
+                //debug!("LIFECYCLE EVENT (CALLBACK) ID: {} RESP: {:?}", id, resp);
+                let cbid = {
+                    let mut cursor = Cursor::new(&resp.payload);
+                    let (msg, _) = request::generated::remote_domain_event_callback_lifecycle_msg::unpack(&mut cursor).unwrap();
+                    debug!("LIFECYCLE EVENT (CALLBACK) PL: {:?}", msg);
+                    msg.callbackID
+                };
+                {
+                    let mut map = self.events.lock().unwrap();
+                    if let Some(sender) = map.get_mut(&cbid) {
+                        sender.start_send(resp.clone());
+                        sender.poll_complete();
+                    }
+                }
+                return true;
+            },
+            _ => {
+                debug!("SOMETHING RESP: {:?}", resp);
+            },
+        }
+        false
+    }
+}
+
 impl<T> Stream for LibvirtTransport<T> where
     T: AsyncRead + AsyncWrite + 'static,
  {
@@ -142,21 +171,14 @@ impl<T> Stream for LibvirtTransport<T> where
     type Error = ::std::io::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.inner.poll().map(|async| {
-            use futures::Async;
-            match async {
+        use futures::Async;
+        match self.inner.poll() {
+            Ok(async) => {
+                match async {
                 Async::Ready(Some((id, ref resp))) => {
+                    debug!("SOMETHING READY ID: {} RESP: {:?}", id, resp);
                     let procedure = unsafe { ::std::mem::transmute(resp.header.proc_ as u16) };
                     match procedure {
-                        /*
-                        request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_LIFECYCLE => {
-                            debug!("LIFECYCLE EVENT ID: {} RESP: {:?}", id, resp);
-                            let mut cursor = Cursor::new(&resp.payload);
-                            let msg = request::generated::remote_domain_event_lifecycle_msg::unpack(&mut cursor).unwrap();
-                            debug!("LIFECYCLE EVENT ID: {} PL: {:?}", id, msg);
-                            return Async::NotReady;
-                        },
-                        */
                         request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE => {
                             //debug!("LIFECYCLE EVENT (CALLBACK) ID: {} RESP: {:?}", id, resp);
                             let cbid = {
@@ -165,24 +187,27 @@ impl<T> Stream for LibvirtTransport<T> where
                                 debug!("LIFECYCLE EVENT (CALLBACK) ID: {} PL: {:?}", id, msg);
                                 msg.callbackID
                             };
-                            let mut map = self.events.lock().unwrap();
-                            if let Some(sender) = map.get_mut(&cbid) {
-                                sender.start_send(resp.clone());
-                                sender.poll_complete();
+                            {
+                                let mut map = self.events.lock().unwrap();
+                                if let Some(sender) = map.get_mut(&cbid) {
+                                    sender.start_send(resp.clone());
+                                    sender.poll_complete();
+                                }
                             }
-                            return Async::NotReady;
+                            return self.poll();
                         },
                         _ => {
                             debug!("SOMETHING ID: {} RESP: {:?}", id, resp);
                         },
                     }
                 },
-                _ => {
-                    debug!("{:?}", async)
-                },
-            }
-            async
-        })
+                _ => debug!("{:?}", async),
+                }
+                debug!("RETURNING {:?}", async);
+                Ok(async)
+            },
+            Err(e) => Err(e),
+        }
     }
 }
 
@@ -407,8 +432,15 @@ fn such_async() {
                 Ok(())
             })
     }).unwrap();
-    println!("{:?}", result);
+    //println!("RESULT {:?}", result);
     loop {
+        /*
+        result.for_each(|ev| {
+            println!("EVENT {:?}", ev);
+            Ok(())
+        })
+        */
         core.turn(None);
+        //println!("CORE TURNED");
     }
 }
