@@ -132,25 +132,25 @@ impl<T, C> Sink for FramedTransport<T, C> where
 
 struct LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     inner: FramedTransport<T, LibvirtCodec>,
-    events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<LibvirtResponse>>>>,
+    events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
 }
 
 impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
-    fn read_event(&self, resp: &LibvirtResponse) -> bool {
+    fn process_event(&self, resp: &LibvirtResponse) -> bool {
         let procedure = unsafe { ::std::mem::transmute(resp.header.proc_ as u16) };
         match procedure {
             request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE => {
                 //debug!("LIFECYCLE EVENT (CALLBACK) ID: {} RESP: {:?}", id, resp);
-                let cbid = {
+                let msg = {
                     let mut cursor = Cursor::new(&resp.payload);
                     let (msg, _) = request::generated::remote_domain_event_callback_lifecycle_msg::unpack(&mut cursor).unwrap();
                     debug!("LIFECYCLE EVENT (CALLBACK) PL: {:?}", msg);
-                    msg.callbackID
+                    msg
                 };
                 {
                     let mut map = self.events.lock().unwrap();
-                    if let Some(sender) = map.get_mut(&cbid) {
-                        sender.start_send(resp.clone());
+                    if let Some(sender) = map.get_mut(&msg.callbackID) {
+                        sender.start_send(msg.into());
                         sender.poll_complete();
                     }
                 }
@@ -177,6 +177,10 @@ impl<T> Stream for LibvirtTransport<T> where
                 match async {
                 Async::Ready(Some((id, ref resp))) => {
                     debug!("SOMETHING READY ID: {} RESP: {:?}", id, resp);
+                    if self.process_event(resp) {
+                            return self.poll();
+                    }
+                    /*
                     let procedure = unsafe { ::std::mem::transmute(resp.header.proc_ as u16) };
                     match procedure {
                         request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE => {
@@ -200,6 +204,7 @@ impl<T> Stream for LibvirtTransport<T> where
                             debug!("SOMETHING ID: {} RESP: {:?}", id, resp);
                         },
                     }
+                    */
                 },
                 _ => debug!("{:?}", async),
                 }
@@ -232,7 +237,7 @@ impl<T> Sink for LibvirtTransport<T> where
 
 #[derive(Debug, Clone)]
 struct LibvirtProto {
-    events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<LibvirtResponse>>>>,
+    events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
 }
 
 impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWrite + 'static {
@@ -255,38 +260,22 @@ impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWri
     }
 }
 
-#[derive(Debug)]
-enum LibvirtEvent {
-    Lifecycle(request::generated::remote_domain_event_callback_lifecycle_msg),
+pub struct EventStream<T> {
+    inner: ::futures::sync::mpsc::Receiver<T>,
 }
 
-struct EventStream {
-    inner: ::futures::sync::mpsc::Receiver<LibvirtResponse>,
-}
-
-/*
-impl Stream for EventStream {
-    type Item = LibvirtEvent;
-    type Error = ::std::io::Error;
+impl<T> Stream for EventStream<T> {
+    type Item = T;
+    type Error = ();
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.inner.poll().map(|async| {
-            use futures::Async;
-            match async {
-                Async::Ready(Some(ref resp)) => {
-
-                },
-                Async::Ready(None) => Async::Ready(None),
-                Async::NotReady => Async::NotReady,
-            }
-        })
+        self.inner.poll()
     }
 }
-*/
 
 /// Libvirt client
 pub struct Client {
-    events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<LibvirtResponse>>>>,
+    events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
     inner: multiplex::ClientService<::tokio_uds::UnixStream, LibvirtProto>,
 }
 
@@ -378,7 +367,7 @@ impl Client {
         self.request(request::remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_REGISTER_ANY, pl).map(|_| ()).boxed()
     }
 
-    pub fn register_event(&self, dom: &request::Domain, event: i32) -> ::futures::BoxFuture<::futures::sync::mpsc::Receiver<LibvirtResponse>, LibvirtError> {
+    pub fn register_event(&self, dom: &request::Domain, event: i32) -> ::futures::BoxFuture<EventStream<::request::DomainEvent>, LibvirtError> {
         let pl = request::DomainEventCallbackRegisterAnyRequest::new(event, dom);
         let map = self.events.clone();
         self.request(request::remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_CALLBACK_REGISTER_ANY, pl)
@@ -389,7 +378,7 @@ impl Client {
                     let mut map = map.lock().unwrap();
                     let (sender, receiver) = ::futures::sync::mpsc::channel(1024);
                     map.insert(id, sender);
-                    receiver
+                    EventStream{inner: receiver}
                 }
             }).boxed()
     }

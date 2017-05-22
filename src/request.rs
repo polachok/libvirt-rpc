@@ -435,25 +435,82 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for DomainLookupByUuidRequest {
     type Response = DomainLookupByUuidResponse;
 }
 
-/* virDomainEventType: http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventType */
 #[derive(Debug)]
-enum DomainEventType {
-    Defined = 0,
-    Undefined = 1,
-    Started = 2,
-    Suspended = 3,
-    Resumed = 4,
-    Stopped = 5,
-    Shutdown = 6,
-    PmSuspended = 7,
-    Crashed = 8,
-}
-
-#[derive(Debug)]
-enum EventStartedDetailType {
+pub enum EventStartedDetailType {
     Booted = 0,
     Migrated = 1,
     Restored = 2,
     FromSnapshot = 3,
     Wakeup = 4,
+}
+
+#[derive(Debug)]
+pub enum EventStoppedDetailType {
+    Shutdown = 0,
+    Destroyed = 1,
+    Crashed = 2,
+    Migrated = 3,
+    Saved = 4,
+    Failed = 5,
+    FromSnapshot = 6,
+}
+
+#[derive(Debug)]
+pub enum EventResumedDetailType {
+    Unpaused = 0,
+    Migrated = 1,
+    FromSnapshot = 2,
+    Postcopy = 3,
+}
+
+#[derive(Debug)]
+pub enum DomainEventInfo {
+    Started(EventStartedDetailType),
+    Stopped(EventStoppedDetailType),
+    Resumed(EventResumedDetailType),
+    Other(i32, i32)
+}
+
+#[derive(Debug)]
+pub struct DomainEvent {
+    domain: Domain,
+    info: DomainEventInfo,
+}
+
+/* virDomainEventType: http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventType */
+const VIR_DOMAIN_EVENT_DEFINED: i32	=	0;
+const VIR_DOMAIN_EVENT_UNDEFINED: i32	=	1;
+const VIR_DOMAIN_EVENT_STARTED: i32	=	2;
+const VIR_DOMAIN_EVENT_SUSPENDED: i32	=	3;
+const VIR_DOMAIN_EVENT_RESUMED: i32	=	4;
+const VIR_DOMAIN_EVENT_STOPPED: i32	=	5;
+const VIR_DOMAIN_EVENT_SHUTDOWN: i32	=	6;
+const VIR_DOMAIN_EVENT_PMSUSPENDED: i32	=	7;
+const VIR_DOMAIN_EVENT_CRASHED: i32	=	8;
+const VIR_DOMAIN_EVENT_LAST: i32	=	9;
+
+
+impl From<generated::remote_domain_event_callback_lifecycle_msg> for DomainEvent {
+    fn from(ev: generated::remote_domain_event_callback_lifecycle_msg) -> Self {
+        use ::std::mem;
+        let info = match ev.msg.event {
+            VIR_DOMAIN_EVENT_STARTED => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::Started(detail)
+            }
+            VIR_DOMAIN_EVENT_STOPPED => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::Stopped(detail)
+            }
+            VIR_DOMAIN_EVENT_RESUMED => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::Resumed(detail)
+            }
+            i => {
+                DomainEventInfo::Other(i, ev.msg.detail)
+            }
+        };
+        let domain = Domain(ev.msg.dom);
+        DomainEvent { domain, info }
+    }
 }
