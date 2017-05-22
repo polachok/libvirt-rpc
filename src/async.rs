@@ -189,8 +189,10 @@ impl Client {
         }
     }
 
-    fn request<P, U>(&self, procedure: request::remote_procedure, payload: P) -> ::futures::BoxFuture<U, LibvirtError>
-        where P: Pack<::bytes::Writer<::bytes::BytesMut>>, U: Unpack<Cursor<::bytes::BytesMut>> + Send + 'static
+    fn request<P>(&self, procedure: request::remote_procedure, payload: P) ->
+     ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
+        where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
+        <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
      {
         let req = Self::pack(procedure, payload);
         match req {
@@ -205,7 +207,8 @@ impl Client {
     }
 
     pub fn auth(&self) -> ::futures::BoxFuture<request::AuthListResponse, LibvirtError> {
-        self.request(request::remote_procedure::REMOTE_PROC_AUTH_LIST, ())
+        let pl = request::AuthListRequest::new();
+        self.request(request::remote_procedure::REMOTE_PROC_AUTH_LIST, pl)
     }
 
     /// opens up a read-write connection to the system qemu hypervisor driver
@@ -215,13 +218,19 @@ impl Client {
     }
 
     /// can be used to obtain the version of the libvirt software in use on the host
-    pub fn version(&self) -> ::futures::BoxFuture<request::GetLibVersionResponse, LibvirtError> {
-        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_GET_LIB_VERSION, ())
+    pub fn version(&self) -> ::futures::BoxFuture<(u32, u32, u32), LibvirtError> {
+        let pl = request::GetLibVersionRequest::new();
+        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_GET_LIB_VERSION, pl).map(|resp| resp.version()).boxed()
     }
 
     pub fn list(&self) -> ::futures::BoxFuture<request::ListAllDomainsResponse, LibvirtError> {
         let payload = request::ListAllDomainsRequest::new(3);
         self.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_DOMAINS, payload)
+    }
+
+    pub fn lookup_by_uuid(&self, uuid: &::uuid::Uuid) -> ::futures::BoxFuture<request::Domain, LibvirtError> {
+        let payload = request::DomainLookupByUuidRequest::new(uuid);
+        self.request(request::remote_procedure::REMOTE_PROC_DOMAIN_LOOKUP_BY_UUID, payload).map(|resp| resp.domain()).boxed()
     }
 }
 
@@ -243,11 +252,13 @@ fn such_async() {
     let mut core = Core::new().unwrap();
     let handle = core.handle(); 
     let client = Client::connect("/var/run/libvirt/libvirt-sock", &handle).unwrap();
+    let uuid = ::uuid::Uuid::parse_str("61737ee1-8fd0-47de-a7af-156102602cf1").unwrap();
     let result = core.run({
         client.auth()
             .and_then(|_| client.open())
             .and_then(|_| client.version())
             .and_then(|_| client.list())
+            .and_then(|_| client.lookup_by_uuid(&uuid) )
     }).unwrap();
     println!("{:?}", result);
 }

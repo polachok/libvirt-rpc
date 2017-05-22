@@ -17,6 +17,10 @@ pub mod generated {
     include!(concat!(env!("OUT_DIR"), "/remote_protocol_xdr.rs"));
 }
 
+pub trait LibvirtRpc<R: ::std::io::Read> where {
+    type Response: Send + ::xdr_codec::Unpack<R>;
+}
+
 pub use self::generated::remote_procedure;
 pub use self::generated::{virNetMessageStatus,virNetMessageHeader,virNetMessageError};
 
@@ -126,6 +130,10 @@ delegate_pack_impl!(AuthListRequest);
 pub struct AuthListResponse(LibvirtResponse<generated::remote_auth_list_ret>);
 delegate_unpack_impl!(AuthListResponse);
 
+impl<R: ::std::io::Read> LibvirtRpc<R> for AuthListRequest {
+    type Response = AuthListResponse;
+}
+
 /// Connect open request
 #[derive(Debug)]
 pub struct ConnectOpenRequest(generated::remote_connect_open_args);
@@ -146,6 +154,10 @@ delegate_pack_impl!(ConnectOpenRequest);
 #[derive(Debug)]
 pub struct ConnectOpenResponse(LibvirtResponse<()>);
 delegate_unpack_impl!(ConnectOpenResponse);
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for ConnectOpenRequest {
+    type Response = ConnectOpenResponse;
+}
 
 #[derive(Debug)]
 pub struct GetLibVersionRequest(());
@@ -177,6 +189,10 @@ impl GetLibVersionResponse {
 
 delegate_unpack_impl!(GetLibVersionResponse);
 
+impl<R: ::std::io::Read> LibvirtRpc<R> for GetLibVersionRequest {
+    type Response = GetLibVersionResponse;
+}
+
 #[derive(Debug)]
 pub struct ListDefinedDomainsRequest(generated::remote_connect_list_defined_domains_args);
 
@@ -206,6 +222,10 @@ impl ListDefinedDomainsResponse {
 
 delegate_unpack_impl!(ListDefinedDomainsResponse);
 
+impl<R: ::std::io::Read> LibvirtRpc<R> for ListDefinedDomainsRequest {
+    type Response = ListDefinedDomainsResponse;
+}
+
 #[derive(Debug)]
 pub struct DomainDefineXMLRequest(generated::remote_domain_define_xml_flags_args);
 
@@ -232,6 +252,10 @@ impl DomainDefineXMLResponse {
 
 delegate_unpack_impl!(DomainDefineXMLResponse);
 
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainDefineXMLRequest {
+    type Response = DomainDefineXMLResponse;
+}
+
 #[derive(Debug)]
 pub struct DomainUndefineRequest(generated::remote_domain_undefine_flags_args);
 
@@ -251,6 +275,10 @@ delegate_pack_impl!(DomainUndefineRequest);
 #[derive(Debug)]
 pub struct DomainUndefineResponse(LibvirtResponse<()>);
 delegate_unpack_impl!(DomainUndefineResponse);
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainUndefineRequest {
+    type Response = DomainUndefineResponse;
+}
 
 bitflags! {
     pub flags DomainCreateFlags: u32 {
@@ -288,6 +316,9 @@ impl DomainCreateResponse {
     }
 }
 
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainCreateRequest {
+    type Response = DomainCreateResponse;
+}
 
 #[derive(Debug)]
 pub struct ListAllDomainsRequest(generated::remote_connect_list_all_domains_args);
@@ -319,6 +350,10 @@ impl ListAllDomainsResponse {
 
 delegate_unpack_impl!(ListAllDomainsResponse);
 
+impl<R: ::std::io::Read> LibvirtRpc<R> for ListAllDomainsRequest {
+    type Response = ListAllDomainsResponse;
+}
+
 #[derive(Debug)]
 pub struct DomainEventCallbackRegisterAnyRequest(generated::remote_connect_domain_event_callback_register_any_args);
 
@@ -338,6 +373,10 @@ delegate_pack_impl!(DomainEventCallbackRegisterAnyRequest);
 pub struct DomainEventCallbackRegisterAnyResponse(generated::remote_connect_domain_event_callback_register_any_ret);
 
 delegate_unpack_impl!(DomainEventCallbackRegisterAnyResponse);
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainEventCallbackRegisterAnyRequest {
+    type Response = DomainEventCallbackRegisterAnyResponse;
+}
 
 #[derive(Debug)]
 pub struct DomainLookupByUuidRequest(generated::remote_domain_lookup_by_uuid_args);
@@ -363,3 +402,7 @@ impl DomainLookupByUuidResponse {
 }
 
 delegate_unpack_impl!(DomainLookupByUuidResponse);
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainLookupByUuidRequest {
+    type Response = DomainLookupByUuidResponse;
+}
