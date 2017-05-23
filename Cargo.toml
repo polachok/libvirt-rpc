@@ -2,6 +2,11 @@
 name = "libvirt-rpc"
 version = "0.1.0"
 authors = ["Alexander Polyakov <apolyakov@beget.com>"]
+description = "libvirt protocol implementation and client"
+documentation = "https://docs.rs/libvirt-rpc"
+homepage = "https://github.com/polachok/libvirt-rpc"
+repository = "https://github.com/polachok/libvirt-rpc"
+license = "LGPL-2.1"
 build = "build.rs"
 
 [build-dependencies]
@@ -15,13 +20,10 @@ futures = "0.1.6"
 tokio-proto = "0.1"
 tokio-service = "0.1"
 tokio-core = "0.1"
-tokio-io = "0.1.1"
+tokio-io = "0.1.2"
 tokio-uds = "0.1"
 tokio-uds-proto = "0.1"
 bytes = "0.4"
 log = "0.3.7"
 env_logger = "0.4"
 bitflags = "0.8.2"
-
-[replace]
-"tokio-io:0.1.1" = { git = "https://github.com/tokio-rs/tokio-io" }
