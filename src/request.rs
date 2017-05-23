@@ -17,6 +17,10 @@ pub mod generated {
     include!(concat!(env!("OUT_DIR"), "/remote_protocol_xdr.rs"));
 }
 
+pub trait LibvirtRpc<R: ::std::io::Read> where {
+    type Response: Send + ::xdr_codec::Unpack<R>;
+}
+
 pub use self::generated::remote_procedure;
 pub use self::generated::{virNetMessageStatus,virNetMessageHeader,virNetMessageError};
 
@@ -126,6 +130,10 @@ delegate_pack_impl!(AuthListRequest);
 pub struct AuthListResponse(LibvirtResponse<generated::remote_auth_list_ret>);
 delegate_unpack_impl!(AuthListResponse);
 
+impl<R: ::std::io::Read> LibvirtRpc<R> for AuthListRequest {
+    type Response = AuthListResponse;
+}
+
 /// Connect open request
 #[derive(Debug)]
 pub struct ConnectOpenRequest(generated::remote_connect_open_args);
@@ -146,6 +154,10 @@ delegate_pack_impl!(ConnectOpenRequest);
 #[derive(Debug)]
 pub struct ConnectOpenResponse(LibvirtResponse<()>);
 delegate_unpack_impl!(ConnectOpenResponse);
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for ConnectOpenRequest {
+    type Response = ConnectOpenResponse;
+}
 
 #[derive(Debug)]
 pub struct GetLibVersionRequest(());
@@ -177,6 +189,10 @@ impl GetLibVersionResponse {
 
 delegate_unpack_impl!(GetLibVersionResponse);
 
+impl<R: ::std::io::Read> LibvirtRpc<R> for GetLibVersionRequest {
+    type Response = GetLibVersionResponse;
+}
+
 #[derive(Debug)]
 pub struct ListDefinedDomainsRequest(generated::remote_connect_list_defined_domains_args);
 
@@ -206,6 +222,10 @@ impl ListDefinedDomainsResponse {
 
 delegate_unpack_impl!(ListDefinedDomainsResponse);
 
+impl<R: ::std::io::Read> LibvirtRpc<R> for ListDefinedDomainsRequest {
+    type Response = ListDefinedDomainsResponse;
+}
+
 #[derive(Debug)]
 pub struct DomainDefineXMLRequest(generated::remote_domain_define_xml_flags_args);
 
@@ -232,6 +252,10 @@ impl DomainDefineXMLResponse {
 
 delegate_unpack_impl!(DomainDefineXMLResponse);
 
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainDefineXMLRequest {
+    type Response = DomainDefineXMLResponse;
+}
+
 #[derive(Debug)]
 pub struct DomainUndefineRequest(generated::remote_domain_undefine_flags_args);
 
@@ -251,6 +275,10 @@ delegate_pack_impl!(DomainUndefineRequest);
 #[derive(Debug)]
 pub struct DomainUndefineResponse(LibvirtResponse<()>);
 delegate_unpack_impl!(DomainUndefineResponse);
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainUndefineRequest {
+    type Response = DomainUndefineResponse;
+}
 
 bitflags! {
     pub flags DomainCreateFlags: u32 {
@@ -288,15 +316,37 @@ impl DomainCreateResponse {
     }
 }
 
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainCreateRequest {
+    type Response = DomainCreateResponse;
+}
+
+bitflags! {
+    pub flags ListAllDomainsFlags: u32 {
+        const DOMAINS_ACTIVE	=	1,
+        const DOMAINS_INACTIVE	=	2,
+        const DOMAINS_PERSISTENT	=	4,
+        const DOMAINS_TRANSIENT	=	8,
+        const DOMAINS_RUNNING	=	16,
+        const DOMAINS_PAUSED	=	32,
+        const DOMAINS_SHUTOFF	=	64,
+        const DOMAINS_OTHER	=	128,
+        const DOMAINS_MANAGEDSAVE	=	256,
+        const DOMAINS_NO_MANAGEDSAVE	=	512,
+        const DOMAINS_AUTOSTART	=	1024,
+        const DOMAINS_NO_AUTOSTART	=	2048,
+        const DOMAINS_HAS_SNAPSHOT	=	4096,
+        const DOMAINS_NO_SNAPSHOT	=	8192,
+    }
+}
 
 #[derive(Debug)]
 pub struct ListAllDomainsRequest(generated::remote_connect_list_all_domains_args);
 
 impl ListAllDomainsRequest {
-    pub fn new(flags: u32) -> Self {
+    pub fn new(flags: ListAllDomainsFlags) -> Self {
         let payload = generated::remote_connect_list_all_domains_args {
             need_results: 1,
-            flags: flags,
+            flags: flags.bits(),
         };
         ListAllDomainsRequest(payload)
     }
@@ -307,8 +357,8 @@ delegate_pack_impl!(ListAllDomainsRequest);
 #[derive(Debug)]
 pub struct ListAllDomainsResponse(generated::remote_connect_list_all_domains_ret);
 
-impl ListAllDomainsResponse {
-    pub fn get_domains(&self) -> Vec<Domain> {
+impl ::std::convert::Into<Vec<Domain>> for ListAllDomainsResponse {
+    fn into(self) -> Vec<Domain> {
         let mut domains = Vec::new();
         for dom in &(self.0).domains {
             domains.push(Domain(dom.clone()))
@@ -319,3 +369,256 @@ impl ListAllDomainsResponse {
 
 delegate_unpack_impl!(ListAllDomainsResponse);
 
+impl<R: ::std::io::Read> LibvirtRpc<R> for ListAllDomainsRequest {
+    type Response = ListAllDomainsResponse;
+}
+
+#[derive(Debug)]
+pub struct DomainEventRegisterAnyRequest(generated::remote_connect_domain_event_register_any_args);
+
+impl DomainEventRegisterAnyRequest {
+    pub fn new(event: i32) -> Self {
+        let payload = generated::remote_connect_domain_event_register_any_args {
+            eventID: event,
+        };
+        DomainEventRegisterAnyRequest(payload)
+    }
+}
+
+delegate_pack_impl!(DomainEventRegisterAnyRequest);
+
+#[derive(Debug)]
+pub struct DomainEventRegisterAnyResponse(());
+delegate_unpack_impl!(DomainEventRegisterAnyResponse);
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainEventRegisterAnyRequest {
+    type Response = DomainEventRegisterAnyResponse;
+}
+
+#[derive(Debug)]
+pub struct DomainEventCallbackRegisterAnyRequest(generated::remote_connect_domain_event_callback_register_any_args);
+
+impl DomainEventCallbackRegisterAnyRequest {
+    pub fn new(event: i32, domain: &Domain) -> Self {
+        let payload = generated::remote_connect_domain_event_callback_register_any_args {
+            eventID: event,
+            dom: Some(Box::new(domain.0.clone())),
+        };
+        DomainEventCallbackRegisterAnyRequest(payload)
+    }
+}
+
+delegate_pack_impl!(DomainEventCallbackRegisterAnyRequest);
+
+#[derive(Debug)]
+pub struct DomainEventCallbackRegisterAnyResponse(generated::remote_connect_domain_event_callback_register_any_ret);
+
+delegate_unpack_impl!(DomainEventCallbackRegisterAnyResponse);
+
+impl DomainEventCallbackRegisterAnyResponse {
+    pub fn callback_id(&self) -> i32 {
+        self.0.callbackID
+    }
+}
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainEventCallbackRegisterAnyRequest {
+    type Response = DomainEventCallbackRegisterAnyResponse;
+}
+
+#[derive(Debug)]
+pub struct DomainLookupByUuidRequest(generated::remote_domain_lookup_by_uuid_args);
+
+impl DomainLookupByUuidRequest {
+    pub fn new(uuid: &::uuid::Uuid) -> Self {
+        let payload = generated::remote_domain_lookup_by_uuid_args {
+            uuid: generated::remote_uuid(uuid.as_bytes().clone()),
+        };
+        DomainLookupByUuidRequest(payload)
+    }
+}
+
+delegate_pack_impl!(DomainLookupByUuidRequest);
+
+#[derive(Debug)]
+pub struct DomainLookupByUuidResponse(generated::remote_domain_lookup_by_uuid_ret);
+
+impl DomainLookupByUuidResponse {
+    pub fn domain(&self) -> Domain {
+        Domain ((self.0).dom.clone())
+    }
+}
+
+delegate_unpack_impl!(DomainLookupByUuidResponse);
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainLookupByUuidRequest {
+    type Response = DomainLookupByUuidResponse;
+}
+
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventStartedDetailType */
+#[derive(Debug)]
+pub enum EventStartedDetailType {
+    /// Normal startup from boot
+    Booted = 0,
+    /// Incoming migration from another host
+    Migrated = 1,
+    /// Restored from a state file
+    Restored = 2,
+    /// Restored from snapshot
+    FromSnapshot = 3,
+    /// Started due to wakeup event
+    Wakeup = 4,
+}
+
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventStoppedDetailType */
+#[derive(Debug)]
+pub enum EventStoppedDetailType {
+    /// Normal shutdown
+    Shutdown = 0,
+    /// Forced poweroff from host
+    Destroyed = 1,
+    /// Guest crashed
+    Crashed = 2,
+    /// Migrated off to another host
+    Migrated = 3,
+    /// Saved to a state file
+    Saved = 4,
+    /// Host emulator/mgmt failed
+    Failed = 5,
+    /// Offline snapshot loaded
+    FromSnapshot = 6,
+}
+
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventSuspendedDetailType */
+#[derive(Debug)]
+pub enum EventSuspendedDetailType {
+    /// Normal suspend due to admin pause
+    Paused = 0,
+    /// Suspended for offline migration
+    Migrated = 1,
+    /// Suspended due to a disk I/O error
+    IoError = 2,
+    /// Suspended due to a watchdog firing
+    Watchdog = 3,
+    /// Restored from paused state file
+    Restored = 4,
+    /// Restored from paused snapshot
+    FromSnapshot = 5,
+    /// Suspended after failure during libvirt API call
+    ApiError = 6,
+    /// Suspended for post-copy migration
+    PostCopy = 7,
+    /// Suspended after failed post-copy
+    PostCopyFailed = 8,
+}
+
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventResumedDetailType */
+#[derive(Debug)]
+pub enum EventResumedDetailType {
+    /// Normal resume due to admin unpause
+    Unpaused = 0,
+    /// Resumed for completion of migration
+    Migrated = 1,
+    /// Resumed from snapshot
+    FromSnapshot = 2,
+    /// Resumed, but migration is still running in post-copy mode
+    PostCopy = 3,
+}
+
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventDefinedDetailType */
+#[derive(Debug)]
+pub enum EventDefinedDetailType {
+    /// Newly created config file
+    Added =	0,
+    /// Changed config file	
+    Updated = 1,
+    /// Domain was renamed
+    Renamed = 2,
+    /// Config was restored from a snapshot
+    FromSnapshot = 3,
+}
+
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventUndefinedDetailType */
+#[derive(Debug)]
+pub enum EventUndefinedDetailType {
+    /// Deleted the config file
+    Removed = 0,
+    /// Domain was renamed
+    Renamed = 1,
+}
+
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventShutdownDetailType */
+#[derive(Debug)]
+pub enum EventShutdownDetailType {
+    /// Guest finished shutdown sequence
+    Finished = 0, 
+}
+
+#[derive(Debug)]
+pub enum DomainEventInfo {
+    Defined(EventDefinedDetailType),
+    Undefined(EventUndefinedDetailType),
+    Started(EventStartedDetailType),
+    Suspended(EventSuspendedDetailType),
+    Stopped(EventStoppedDetailType),
+    Shutdown(EventShutdownDetailType),
+    Resumed(EventResumedDetailType),
+    Other(i32, i32)
+}
+
+#[derive(Debug)]
+pub struct DomainEvent {
+    domain: Domain,
+    info: DomainEventInfo,
+}
+
+/* virDomainEventType: http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventType */
+const VIR_DOMAIN_EVENT_DEFINED: i32	=	0;
+const VIR_DOMAIN_EVENT_UNDEFINED: i32	=	1;
+const VIR_DOMAIN_EVENT_STARTED: i32	=	2;
+const VIR_DOMAIN_EVENT_SUSPENDED: i32	=	3;
+const VIR_DOMAIN_EVENT_RESUMED: i32	=	4;
+const VIR_DOMAIN_EVENT_STOPPED: i32	=	5;
+const VIR_DOMAIN_EVENT_SHUTDOWN: i32	=	6;
+const VIR_DOMAIN_EVENT_PMSUSPENDED: i32	=	7;
+const VIR_DOMAIN_EVENT_CRASHED: i32	=	8;
+
+impl From<generated::remote_domain_event_callback_lifecycle_msg> for DomainEvent {
+    fn from(ev: generated::remote_domain_event_callback_lifecycle_msg) -> Self {
+        use ::std::mem;
+        let info = match ev.msg.event {
+            VIR_DOMAIN_EVENT_DEFINED => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::Defined(detail)
+            }
+            VIR_DOMAIN_EVENT_UNDEFINED => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::Undefined(detail)
+            }
+            VIR_DOMAIN_EVENT_STARTED => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::Started(detail)
+            }
+            VIR_DOMAIN_EVENT_SUSPENDED => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::Suspended(detail)
+            }
+            VIR_DOMAIN_EVENT_STOPPED => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::Stopped(detail)
+            }
+            VIR_DOMAIN_EVENT_RESUMED => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::Resumed(detail)
+            }
+            VIR_DOMAIN_EVENT_SHUTDOWN => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::Shutdown(detail)
+            }
+            i => {
+                DomainEventInfo::Other(i, ev.msg.detail)
+            }
+        };
+        let domain = Domain(ev.msg.dom);
+        DomainEvent { domain, info }
+    }
+}

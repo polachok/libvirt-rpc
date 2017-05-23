@@ -10,6 +10,7 @@ extern crate tokio_uds_proto;
 extern crate bytes;
 #[macro_use]
 extern crate futures;
+#[macro_use]
 extern crate log;
 extern crate env_logger;
 #[macro_use]
