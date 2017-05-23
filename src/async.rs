@@ -21,7 +21,7 @@
 //!     let result = core.run({
 //!         client.auth()
 //!           .and_then(|_| client.open())
-//!           .and_then(|_| client.list(request::flags::DOMAINS_ACTIVE | request::flags::DOMAINS_INACTIVE))
+//!           .and_then(|_| client.domain().list(request::flags::DOMAINS_ACTIVE | request::flags::DOMAINS_INACTIVE))
 //!     }).unwrap();
 //!     println!("{:?}", result);
 //! }
@@ -425,6 +425,12 @@ impl<'a> DomainOperations<'a> {
     pub fn start(&self, dom: request::Domain, flags: request::DomainCreateFlags) -> ::futures::BoxFuture<request::Domain, LibvirtError> {
         let pl = request::DomainCreateRequest::new(dom, flags);
         self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_CREATE_WITH_FLAGS, pl).map(|resp| resp.into()).boxed()
+    }
+
+    /// Destroy the domain object. The running instance is shutdown if not down already and all resources used by it are given back to the hypervisor.
+    pub fn destroy(&self, dom: request::Domain, flags: request::DomainDestroyFlags) -> ::futures::BoxFuture<(), LibvirtError> {
+        let pl = request::DomainDestroyRequest::new(dom, flags);
+        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DESTROY_FLAGS, pl).map(|_| ()).boxed()
     }
 }
 

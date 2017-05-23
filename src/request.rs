@@ -332,6 +332,37 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for DomainCreateRequest {
     type Response = DomainCreateResponse;
 }
 
+bitflags! {
+    pub flags DomainDestroyFlags: u32 {
+        /// Default behavior - could lead to data loss!!
+        const DESTROY_DEFAULT = 0,
+        /// Only SIGTERM, no SIGKILL
+        const DESTROY_GRACEFUL = 1,
+    }
+}
+
+#[derive(Debug)]
+pub struct DomainDestroyRequest(generated::remote_domain_destroy_flags_args);
+delegate_pack_impl!(DomainDestroyRequest);
+
+impl DomainDestroyRequest {
+    pub fn new(dom: Domain, flags: DomainDestroyFlags) -> Self {
+        let payload = generated::remote_domain_destroy_flags_args {
+            dom: dom.0,
+            flags: flags.bits(),
+        };
+        DomainDestroyRequest(payload)
+    }
+}
+
+#[derive(Debug)]
+pub struct DomainDestroyResponse(());
+delegate_unpack_impl!(DomainDestroyResponse);
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainDestroyRequest {
+    type Response = DomainDestroyResponse;
+}
+
 pub mod flags {
     bitflags! {
         pub flags ListAllDomainsFlags: u32 {
