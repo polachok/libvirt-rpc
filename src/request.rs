@@ -435,38 +435,113 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for DomainLookupByUuidRequest {
     type Response = DomainLookupByUuidResponse;
 }
 
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventStartedDetailType */
 #[derive(Debug)]
 pub enum EventStartedDetailType {
+    /// Normal startup from boot
     Booted = 0,
+    /// Incoming migration from another host
     Migrated = 1,
+    /// Restored from a state file
     Restored = 2,
+    /// Restored from snapshot
     FromSnapshot = 3,
+    /// Started due to wakeup event
     Wakeup = 4,
 }
 
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventStoppedDetailType */
 #[derive(Debug)]
 pub enum EventStoppedDetailType {
+    /// Normal shutdown
     Shutdown = 0,
+    /// Forced poweroff from host
     Destroyed = 1,
+    /// Guest crashed
     Crashed = 2,
+    /// Migrated off to another host
     Migrated = 3,
+    /// Saved to a state file
     Saved = 4,
+    /// Host emulator/mgmt failed
     Failed = 5,
+    /// Offline snapshot loaded
     FromSnapshot = 6,
 }
 
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventSuspendedDetailType */
+#[derive(Debug)]
+pub enum EventSuspendedDetailType {
+    /// Normal suspend due to admin pause
+    Paused = 0,
+    /// Suspended for offline migration
+    Migrated = 1,
+    /// Suspended due to a disk I/O error
+    IoError = 2,
+    /// Suspended due to a watchdog firing
+    Watchdog = 3,
+    /// Restored from paused state file
+    Restored = 4,
+    /// Restored from paused snapshot
+    FromSnapshot = 5,
+    /// Suspended after failure during libvirt API call
+    ApiError = 6,
+    /// Suspended for post-copy migration
+    PostCopy = 7,
+    /// Suspended after failed post-copy
+    PostCopyFailed = 8,
+}
+
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventResumedDetailType */
 #[derive(Debug)]
 pub enum EventResumedDetailType {
+    /// Normal resume due to admin unpause
     Unpaused = 0,
+    /// Resumed for completion of migration
     Migrated = 1,
+    /// Resumed from snapshot
     FromSnapshot = 2,
-    Postcopy = 3,
+    /// Resumed, but migration is still running in post-copy mode
+    PostCopy = 3,
+}
+
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventDefinedDetailType */
+#[derive(Debug)]
+pub enum EventDefinedDetailType {
+    /// Newly created config file
+    Added =	0,
+    /// Changed config file	
+    Updated = 1,
+    /// Domain was renamed
+    Renamed = 2,
+    /// Config was restored from a snapshot
+    FromSnapshot = 3,
+}
+
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventUndefinedDetailType */
+#[derive(Debug)]
+pub enum EventUndefinedDetailType {
+    /// Deleted the config file
+    Removed = 0,
+    /// Domain was renamed
+    Renamed = 1,
+}
+
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventShutdownDetailType */
+#[derive(Debug)]
+pub enum EventShutdownDetailType {
+    /// Guest finished shutdown sequence
+    Finished = 0, 
 }
 
 #[derive(Debug)]
 pub enum DomainEventInfo {
+    Defined(EventDefinedDetailType),
+    Undefined(EventUndefinedDetailType),
     Started(EventStartedDetailType),
+    Suspended(EventSuspendedDetailType),
     Stopped(EventStoppedDetailType),
+    Shutdown(EventShutdownDetailType),
     Resumed(EventResumedDetailType),
     Other(i32, i32)
 }
@@ -487,16 +562,26 @@ const VIR_DOMAIN_EVENT_STOPPED: i32	=	5;
 const VIR_DOMAIN_EVENT_SHUTDOWN: i32	=	6;
 const VIR_DOMAIN_EVENT_PMSUSPENDED: i32	=	7;
 const VIR_DOMAIN_EVENT_CRASHED: i32	=	8;
-const VIR_DOMAIN_EVENT_LAST: i32	=	9;
-
 
 impl From<generated::remote_domain_event_callback_lifecycle_msg> for DomainEvent {
     fn from(ev: generated::remote_domain_event_callback_lifecycle_msg) -> Self {
         use ::std::mem;
         let info = match ev.msg.event {
+            VIR_DOMAIN_EVENT_DEFINED => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::Defined(detail)
+            }
+            VIR_DOMAIN_EVENT_UNDEFINED => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::Undefined(detail)
+            }
             VIR_DOMAIN_EVENT_STARTED => {
                 let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
                 DomainEventInfo::Started(detail)
+            }
+            VIR_DOMAIN_EVENT_SUSPENDED => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::Suspended(detail)
             }
             VIR_DOMAIN_EVENT_STOPPED => {
                 let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
@@ -505,6 +590,10 @@ impl From<generated::remote_domain_event_callback_lifecycle_msg> for DomainEvent
             VIR_DOMAIN_EVENT_RESUMED => {
                 let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
                 DomainEventInfo::Resumed(detail)
+            }
+            VIR_DOMAIN_EVENT_SHUTDOWN => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::Shutdown(detail)
             }
             i => {
                 DomainEventInfo::Other(i, ev.msg.detail)

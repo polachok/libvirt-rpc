@@ -357,14 +357,10 @@ impl Client {
         self.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_DOMAINS, payload)
     }
 
+    /// Try to lookup a domain on the given hypervisor based on its UUID.
     pub fn lookup_by_uuid(&self, uuid: &::uuid::Uuid) -> ::futures::BoxFuture<request::Domain, LibvirtError> {
         let pl = request::DomainLookupByUuidRequest::new(uuid);
         self.request(request::remote_procedure::REMOTE_PROC_DOMAIN_LOOKUP_BY_UUID, pl).map(|resp| resp.domain()).boxed()
-    }
-
-    pub fn register(&self, event: i32) -> ::futures::BoxFuture<(), LibvirtError> {
-        let pl = request::DomainEventRegisterAnyRequest::new(event);
-        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_REGISTER_ANY, pl).map(|_| ()).boxed()
     }
 
     pub fn register_event(&self, dom: &request::Domain, event: i32) -> ::futures::BoxFuture<EventStream<::request::DomainEvent>, LibvirtError> {
@@ -373,7 +369,7 @@ impl Client {
         self.request(request::remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_CALLBACK_REGISTER_ANY, pl)
             .map(move |resp| {
                 let id = resp.callback_id();
-                println!("REGISTERED CALLBACK ID {}", id);
+                debug!("REGISTERED CALLBACK ID {}", id);
                 {
                     let mut map = map.lock().unwrap();
                     let (sender, receiver) = ::futures::sync::mpsc::channel(1024);
@@ -382,6 +378,7 @@ impl Client {
                 }
             }).boxed()
     }
+    /* TODO implement unregister */
 }
 
 impl Service for Client {
