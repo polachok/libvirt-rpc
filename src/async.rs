@@ -420,6 +420,12 @@ impl<'a> DomainOperations<'a> {
             }).boxed()
     }
     /* TODO implement unregister */
+
+    /// Launch a defined domain. If the call succeeds the domain moves from the defined to the running domains pools.
+    pub fn start(&self, dom: request::Domain, flags: request::DomainCreateFlags) -> ::futures::BoxFuture<request::Domain, LibvirtError> {
+        let pl = request::DomainCreateRequest::new(dom, flags);
+        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_CREATE_WITH_FLAGS, pl).map(|resp| resp.into()).boxed()
+    }
 }
 
 impl Service for Client {
@@ -449,6 +455,8 @@ fn such_async() {
             .and_then(|_| client.domain().list(request::flags::DOMAINS_ACTIVE | request::flags::DOMAINS_INACTIVE))
             .and_then(|_| client.domain().lookup_by_uuid(&uuid))
             .and_then(|dom| {
+                client.domain().start(dom, request::DomainCreateFlags::empty())
+            }).and_then(|dom| {
                 client.domain().register_event(&dom, 0)
             }).and_then(|events| {
                 handle.spawn(events.for_each(|ev| {

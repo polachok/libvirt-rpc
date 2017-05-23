@@ -283,11 +283,16 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for DomainUndefineRequest {
 
 bitflags! {
     pub flags DomainCreateFlags: u32 {
-        const VIR_DOMAIN_START_PAUSED = 1,
-        const VIR_DOMAIN_START_AUTODESTROY = 2,
-        const VIR_DOMAIN_START_BYPASS_CACHE = 4,
-        const VIR_DOMAIN_START_FORCE_BOOT = 8,
-        const VIR_DOMAIN_START_VALIDATE = 16,
+        /// Launch guest in paused state
+        const START_PAUSED = 1,
+        /// Automatically kill guest when virConnectPtr is closed
+        const START_AUTODESTROY = 2,
+        /// Avoid file system cache pollution
+        const START_BYPASS_CACHE = 4,
+        /// Boot, discarding any managed save
+        const START_FORCE_BOOT = 8,
+        /// Validate the XML document against schema
+        const START_VALIDATE = 16,
     }
 }
 
@@ -307,13 +312,19 @@ impl DomainCreateRequest {
 delegate_pack_impl!(DomainCreateRequest);
 
 #[derive(Debug)]
-pub struct DomainCreateResponse(LibvirtResponse<generated::remote_domain_create_with_flags_ret>);
+pub struct DomainCreateResponse(generated::remote_domain_create_with_flags_ret);
 
 delegate_unpack_impl!(DomainCreateResponse);
 
+impl ::std::convert::Into<Domain> for DomainCreateResponse {
+    fn into(self) -> Domain {
+        Domain (self.0.dom)
+    }
+}
+
 impl DomainCreateResponse {
     pub fn get_domain(&self) -> Domain {
-        Domain ((self.0).0.dom.clone())
+        Domain ((self.0).dom.clone())
     }
 }
 
