@@ -1,7 +1,35 @@
 //! This module provides tokio based async interface to libvirt API
+//!  
+//! # Examples
+//!
+//! ## Connect to local libvirtd and get list of domains
+//!
+//! ```
+//! extern crate tokio_core;
+//! extern crate libvirt_rpc;
+//! extern crate futures;
+//!
+//! use ::tokio_core::reactor::Core;
+//! use libvirt_rpc::async::Client;
+//! use libvirt_rpc::request;
+//! use futures::Future;
+//!
+//! fn main() {
+//!     let mut core = Core::new().unwrap();
+//!     let handle = core.handle(); 
+//!     let client = Client::connect("/var/run/libvirt/libvirt-sock", &handle).unwrap();
+//!     let result = core.run({
+//!         client.auth()
+//!           .and_then(|_| client.open())
+//!           .and_then(|_| client.list(request::flags::DOMAINS_ACTIVE | request::flags::DOMAINS_INACTIVE))
+//!     }).unwrap();
+//!     println!("{:?}", result);
+//! }
+//! ```
+//!
 use std::io::Cursor;
 use std::path::Path;
-use std::collections::{HashMap,VecDeque};
+use std::collections::HashMap;
 use std::sync::{Arc,Mutex};
 use ::xdr_codec::{Pack,Unpack};
 use ::bytes::{BufMut, BytesMut};
@@ -140,7 +168,6 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
         let procedure = unsafe { ::std::mem::transmute(resp.header.proc_ as u16) };
         match procedure {
             request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE => {
-                //debug!("LIFECYCLE EVENT (CALLBACK) ID: {} RESP: {:?}", id, resp);
                 let msg = {
                     let mut cursor = Cursor::new(&resp.payload);
                     let (msg, _) = request::generated::remote_domain_event_callback_lifecycle_msg::unpack(&mut cursor).unwrap();
@@ -157,7 +184,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                 return true;
             },
             _ => {
-                debug!("SOMETHING RESP: {:?}", resp);
+                debug!("unknown procedure {:?} in {:?}", procedure, resp);
             },
         }
         false
@@ -176,8 +203,9 @@ impl<T> Stream for LibvirtTransport<T> where
             Ok(async) => {
                 match async {
                 Async::Ready(Some((id, ref resp))) => {
-                    debug!("SOMETHING READY ID: {} RESP: {:?}", id, resp);
+                    debug!("FRAME READY ID: {} RESP: {:?}", id, resp);
                     if self.process_event(resp) {
+                            debug!("processed event, get next packet");
                             return self.poll();
                     }
                     /*
@@ -406,7 +434,6 @@ fn such_async() {
     let result = core.run({
         client.auth()
             .and_then(|_| client.open())
-            //.and_then(|_| client.register(0))
             .and_then(|_| client.version())
             .and_then(|_| client.list(request::flags::DOMAINS_ACTIVE | request::flags::DOMAINS_INACTIVE))
             .and_then(|_| client.lookup_by_uuid(&uuid))
@@ -420,7 +447,7 @@ fn such_async() {
                 Ok(())
             })
     }).unwrap();
-    //println!("RESULT {:?}", result);
+    println!("RESULT {:?}", result);
     loop {
         /*
         result.for_each(|ev| {
