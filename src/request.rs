@@ -4,7 +4,8 @@ use std::convert::From;
 use std::default::Default;
 
 pub mod generated {
-    //! This module is generated from protocol files
+    //! This module is generated from protocol files.
+    //!
     //! It follows original naming convention
     #![allow(non_camel_case_types)]
     #![allow(dead_code)]
@@ -320,22 +321,24 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for DomainCreateRequest {
     type Response = DomainCreateResponse;
 }
 
-bitflags! {
-    pub flags ListAllDomainsFlags: u32 {
-        const DOMAINS_ACTIVE	=	1,
-        const DOMAINS_INACTIVE	=	2,
-        const DOMAINS_PERSISTENT	=	4,
-        const DOMAINS_TRANSIENT	=	8,
-        const DOMAINS_RUNNING	=	16,
-        const DOMAINS_PAUSED	=	32,
-        const DOMAINS_SHUTOFF	=	64,
-        const DOMAINS_OTHER	=	128,
-        const DOMAINS_MANAGEDSAVE	=	256,
-        const DOMAINS_NO_MANAGEDSAVE	=	512,
-        const DOMAINS_AUTOSTART	=	1024,
-        const DOMAINS_NO_AUTOSTART	=	2048,
-        const DOMAINS_HAS_SNAPSHOT	=	4096,
-        const DOMAINS_NO_SNAPSHOT	=	8192,
+pub mod flags {
+    bitflags! {
+        pub flags ListAllDomainsFlags: u32 {
+            const DOMAINS_ACTIVE	=	1,
+            const DOMAINS_INACTIVE	=	2,
+            const DOMAINS_PERSISTENT	=	4,
+            const DOMAINS_TRANSIENT	=	8,
+            const DOMAINS_RUNNING	=	16,
+            const DOMAINS_PAUSED	=	32,
+            const DOMAINS_SHUTOFF	=	64,
+            const DOMAINS_OTHER	=	128,
+            const DOMAINS_MANAGEDSAVE	=	256,
+            const DOMAINS_NO_MANAGEDSAVE	=	512,
+            const DOMAINS_AUTOSTART	=	1024,
+            const DOMAINS_NO_AUTOSTART	=	2048,
+            const DOMAINS_HAS_SNAPSHOT	=	4096,
+            const DOMAINS_NO_SNAPSHOT	=	8192,
+        }
     }
 }
 
@@ -343,7 +346,7 @@ bitflags! {
 pub struct ListAllDomainsRequest(generated::remote_connect_list_all_domains_args);
 
 impl ListAllDomainsRequest {
-    pub fn new(flags: ListAllDomainsFlags) -> Self {
+    pub fn new(flags: flags::ListAllDomainsFlags) -> Self {
         let payload = generated::remote_connect_list_all_domains_args {
             need_results: 1,
             flags: flags.bits(),

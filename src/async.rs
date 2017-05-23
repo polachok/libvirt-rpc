@@ -14,7 +14,7 @@ use ::request;
 use ::LibvirtError;
 use ::futures::{Stream, Sink, Poll, StartSend, Future, future};
 
-pub struct LibvirtCodec;
+struct LibvirtCodec;
 
 #[derive(Debug,Clone)]
 pub struct LibvirtRequest {
@@ -335,6 +335,7 @@ impl Client {
         }
     }
 
+    /// Retrieves authentication methods (currently only unauthenticated connections are supported)
     pub fn auth(&self) -> ::futures::BoxFuture<request::AuthListResponse, LibvirtError> {
         let pl = request::AuthListRequest::new();
         self.request(request::remote_procedure::REMOTE_PROC_AUTH_LIST, pl)
@@ -353,7 +354,7 @@ impl Client {
     }
 
     /// Collect a possibly-filtered list of all domains, and return an allocated array of information for each. 
-    pub fn list(&self, flags: request::ListAllDomainsFlags) -> ::futures::BoxFuture<Vec<request::Domain>, LibvirtError> {
+    pub fn list(&self, flags: request::flags::ListAllDomainsFlags) -> ::futures::BoxFuture<Vec<request::Domain>, LibvirtError> {
         let payload = request::ListAllDomainsRequest::new(flags);
         self.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_DOMAINS, payload).map(|resp| resp.into()).boxed()
     }
@@ -407,7 +408,7 @@ fn such_async() {
             .and_then(|_| client.open())
             //.and_then(|_| client.register(0))
             .and_then(|_| client.version())
-            .and_then(|_| client.list(request::DOMAINS_ACTIVE | request::DOMAINS_INACTIVE))
+            .and_then(|_| client.list(request::flags::DOMAINS_ACTIVE | request::flags::DOMAINS_INACTIVE))
             .and_then(|_| client.lookup_by_uuid(&uuid))
             .and_then(|dom| {
                 client.register_event(&dom, 0)
