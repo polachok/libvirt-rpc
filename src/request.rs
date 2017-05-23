@@ -320,14 +320,33 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for DomainCreateRequest {
     type Response = DomainCreateResponse;
 }
 
+bitflags! {
+    pub flags ListAllDomainsFlags: u32 {
+        const DOMAINS_ACTIVE	=	1,
+        const DOMAINS_INACTIVE	=	2,
+        const DOMAINS_PERSISTENT	=	4,
+        const DOMAINS_TRANSIENT	=	8,
+        const DOMAINS_RUNNING	=	16,
+        const DOMAINS_PAUSED	=	32,
+        const DOMAINS_SHUTOFF	=	64,
+        const DOMAINS_OTHER	=	128,
+        const DOMAINS_MANAGEDSAVE	=	256,
+        const DOMAINS_NO_MANAGEDSAVE	=	512,
+        const DOMAINS_AUTOSTART	=	1024,
+        const DOMAINS_NO_AUTOSTART	=	2048,
+        const DOMAINS_HAS_SNAPSHOT	=	4096,
+        const DOMAINS_NO_SNAPSHOT	=	8192,
+    }
+}
+
 #[derive(Debug)]
 pub struct ListAllDomainsRequest(generated::remote_connect_list_all_domains_args);
 
 impl ListAllDomainsRequest {
-    pub fn new(flags: u32) -> Self {
+    pub fn new(flags: ListAllDomainsFlags) -> Self {
         let payload = generated::remote_connect_list_all_domains_args {
             need_results: 1,
-            flags: flags,
+            flags: flags.bits(),
         };
         ListAllDomainsRequest(payload)
     }
@@ -338,8 +357,8 @@ delegate_pack_impl!(ListAllDomainsRequest);
 #[derive(Debug)]
 pub struct ListAllDomainsResponse(generated::remote_connect_list_all_domains_ret);
 
-impl ListAllDomainsResponse {
-    pub fn get_domains(&self) -> Vec<Domain> {
+impl ::std::convert::Into<Vec<Domain>> for ListAllDomainsResponse {
+    fn into(self) -> Vec<Domain> {
         let mut domains = Vec::new();
         for dom in &(self.0).domains {
             domains.push(Domain(dom.clone()))

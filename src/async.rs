@@ -340,21 +340,22 @@ impl Client {
         self.request(request::remote_procedure::REMOTE_PROC_AUTH_LIST, pl)
     }
 
-    /// opens up a read-write connection to the system qemu hypervisor driver
-    pub fn open(&self) -> ::futures::BoxFuture<request::ConnectOpenResponse, LibvirtError> {
+    /// Opens up a read-write connection to the system qemu hypervisor driver
+    pub fn open(&self) -> ::futures::BoxFuture<(), LibvirtError> {
         let pl = request::ConnectOpenRequest::new();
-        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_OPEN, pl)
+        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_OPEN, pl).map(|_| ()).boxed()
     }
 
-    /// can be used to obtain the version of the libvirt software in use on the host
+    /// Can be used to obtain the version of the libvirt software in use on the host
     pub fn version(&self) -> ::futures::BoxFuture<(u32, u32, u32), LibvirtError> {
         let pl = request::GetLibVersionRequest::new();
         self.request(request::remote_procedure::REMOTE_PROC_CONNECT_GET_LIB_VERSION, pl).map(|resp| resp.version()).boxed()
     }
 
-    pub fn list(&self) -> ::futures::BoxFuture<request::ListAllDomainsResponse, LibvirtError> {
-        let payload = request::ListAllDomainsRequest::new(3);
-        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_DOMAINS, payload)
+    /// Collect a possibly-filtered list of all domains, and return an allocated array of information for each. 
+    pub fn list(&self, flags: request::ListAllDomainsFlags) -> ::futures::BoxFuture<Vec<request::Domain>, LibvirtError> {
+        let payload = request::ListAllDomainsRequest::new(flags);
+        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_DOMAINS, payload).map(|resp| resp.into()).boxed()
     }
 
     /// Try to lookup a domain on the given hypervisor based on its UUID.
@@ -406,7 +407,7 @@ fn such_async() {
             .and_then(|_| client.open())
             //.and_then(|_| client.register(0))
             .and_then(|_| client.version())
-            .and_then(|_| client.list())
+            .and_then(|_| client.list(request::DOMAINS_ACTIVE | request::DOMAINS_INACTIVE))
             .and_then(|_| client.lookup_by_uuid(&uuid))
             .and_then(|dom| {
                 client.register_event(&dom, 0)
