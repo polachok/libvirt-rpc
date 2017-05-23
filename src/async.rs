@@ -381,22 +381,33 @@ impl Client {
         self.request(request::remote_procedure::REMOTE_PROC_CONNECT_GET_LIB_VERSION, pl).map(|resp| resp.version()).boxed()
     }
 
+    pub fn domain(&self) -> DomainOperations {
+        DomainOperations{client: self}
+    }
+}
+
+/// Operations on libvirt domains
+pub struct DomainOperations<'a> {
+    client: &'a Client,
+}
+
+impl<'a> DomainOperations<'a> {
     /// Collect a possibly-filtered list of all domains, and return an allocated array of information for each. 
     pub fn list(&self, flags: request::flags::ListAllDomainsFlags) -> ::futures::BoxFuture<Vec<request::Domain>, LibvirtError> {
         let payload = request::ListAllDomainsRequest::new(flags);
-        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_DOMAINS, payload).map(|resp| resp.into()).boxed()
+        self.client.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_DOMAINS, payload).map(|resp| resp.into()).boxed()
     }
 
-    /// Try to lookup a domain on the given hypervisor based on its UUID.
+    /// Lookup a domain on the given hypervisor based on its UUID.
     pub fn lookup_by_uuid(&self, uuid: &::uuid::Uuid) -> ::futures::BoxFuture<request::Domain, LibvirtError> {
         let pl = request::DomainLookupByUuidRequest::new(uuid);
-        self.request(request::remote_procedure::REMOTE_PROC_DOMAIN_LOOKUP_BY_UUID, pl).map(|resp| resp.domain()).boxed()
+        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_LOOKUP_BY_UUID, pl).map(|resp| resp.domain()).boxed()
     }
 
     pub fn register_event(&self, dom: &request::Domain, event: i32) -> ::futures::BoxFuture<EventStream<::request::DomainEvent>, LibvirtError> {
         let pl = request::DomainEventCallbackRegisterAnyRequest::new(event, dom);
-        let map = self.events.clone();
-        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_CALLBACK_REGISTER_ANY, pl)
+        let map = self.client.events.clone();
+        self.client.request(request::remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_CALLBACK_REGISTER_ANY, pl)
             .map(move |resp| {
                 let id = resp.callback_id();
                 debug!("REGISTERED CALLBACK ID {}", id);
@@ -435,10 +446,10 @@ fn such_async() {
         client.auth()
             .and_then(|_| client.open())
             .and_then(|_| client.version())
-            .and_then(|_| client.list(request::flags::DOMAINS_ACTIVE | request::flags::DOMAINS_INACTIVE))
-            .and_then(|_| client.lookup_by_uuid(&uuid))
+            .and_then(|_| client.domain().list(request::flags::DOMAINS_ACTIVE | request::flags::DOMAINS_INACTIVE))
+            .and_then(|_| client.domain().lookup_by_uuid(&uuid))
             .and_then(|dom| {
-                client.register_event(&dom, 0)
+                client.domain().register_event(&dom, 0)
             }).and_then(|events| {
                 handle.spawn(events.for_each(|ev| {
                     println!("EVENT {:?}", ev);
