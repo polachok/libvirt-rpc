@@ -184,7 +184,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                 return true;
             },
             _ => {
-                debug!("SOMETHING RESP: {:?}", resp);
+                debug!("unknown procedure {:?} in {:?}", procedure, resp);
             },
         }
         false
@@ -203,8 +203,9 @@ impl<T> Stream for LibvirtTransport<T> where
             Ok(async) => {
                 match async {
                 Async::Ready(Some((id, ref resp))) => {
-                    debug!("SOMETHING READY ID: {} RESP: {:?}", id, resp);
+                    debug!("FRAME READY ID: {} RESP: {:?}", id, resp);
                     if self.process_event(resp) {
+                            debug!("processed event, get next packet");
                             return self.poll();
                     }
                     /*
@@ -433,7 +434,6 @@ fn such_async() {
     let result = core.run({
         client.auth()
             .and_then(|_| client.open())
-            //.and_then(|_| client.register(0))
             .and_then(|_| client.version())
             .and_then(|_| client.list(request::flags::DOMAINS_ACTIVE | request::flags::DOMAINS_INACTIVE))
             .and_then(|_| client.lookup_by_uuid(&uuid))
@@ -447,7 +447,7 @@ fn such_async() {
                 Ok(())
             })
     }).unwrap();
-    //println!("RESULT {:?}", result);
+    println!("RESULT {:?}", result);
     loop {
         /*
         result.for_each(|ev| {
