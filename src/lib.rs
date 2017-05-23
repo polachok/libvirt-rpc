@@ -31,9 +31,12 @@ pub struct Libvirt<Io: ::std::io::Read+::std::io::Write> {
     stream: Io,
 }
 
+/// Represents error 
 #[derive(Debug)]
 pub enum LibvirtError {
+    /// Error during serialization / deserialization
     XdrError(xdr_codec::Error),
+    /// Libvirtd returned error
     Libvirt(request::virNetMessageError),
 }
 
