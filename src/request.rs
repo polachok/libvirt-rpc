@@ -280,8 +280,14 @@ impl DomainUndefineRequest {
 delegate_pack_impl!(DomainUndefineRequest);
 
 #[derive(Debug)]
-pub struct DomainUndefineResponse(LibvirtResponse<()>);
+pub struct DomainUndefineResponse(());
 delegate_unpack_impl!(DomainUndefineResponse);
+
+impl Into<()> for DomainUndefineResponse {
+    fn into(self) -> () {
+        ()
+    }
+}
 
 impl<R: ::std::io::Read> LibvirtRpc<R> for DomainUndefineRequest {
     type Response = DomainUndefineResponse;

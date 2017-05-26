@@ -439,6 +439,13 @@ impl<'a> DomainOperations<'a> {
         let pl = request::DomainDefineXMLRequest::new(xml, 1); /* TODO: flags */
         self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DEFINE_XML_FLAGS, pl).map(|resp| resp.into()).boxed()
     }
+
+    /// Undefine a domain. If the domain is running, it's converted to transient domain, without stopping it.
+    /// If the domain is inactive, the domain configuration is removed.
+    pub fn undefine(&self, dom: request::Domain) -> ::futures::BoxFuture<(), LibvirtError> {
+        let pl = request::DomainUndefineRequest::new(dom, 0); /* TODO: flags */
+        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_UNDEFINE_FLAGS, pl).map(|resp| resp.into()).boxed()
+    }
 }
 
 impl Service for Client {
