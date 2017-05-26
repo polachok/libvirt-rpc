@@ -432,6 +432,52 @@ impl<'a> DomainOperations<'a> {
         let pl = request::DomainDestroyRequest::new(dom, flags);
         self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DESTROY_FLAGS, pl).map(|_| ()).boxed()
     }
+
+    /// Defines a domain, but does not start it. This definition is persistent, until explicitly undefined with virDomainUndefine().
+    /// A previous definition for this domain would be overridden if it already exists.
+    pub fn define(&self, xml: &str) -> ::futures::BoxFuture<request::Domain, LibvirtError> {
+        let pl = request::DomainDefineXMLRequest::new(xml, 1); /* TODO: flags */
+        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DEFINE_XML_FLAGS, pl).map(|resp| resp.into()).boxed()
+    }
+
+    /// Undefine a domain. If the domain is running, it's converted to transient domain, without stopping it.
+    /// If the domain is inactive, the domain configuration is removed.
+    pub fn undefine(&self, dom: request::Domain) -> ::futures::BoxFuture<(), LibvirtError> {
+        let pl = request::DomainUndefineRequest::new(dom, 0); /* TODO: flags */
+        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_UNDEFINE_FLAGS, pl).map(|resp| resp.into()).boxed()
+    }
+
+    /// Shutdown a domain, the domain object is still usable thereafter, but the domain OS is being stopped.
+    /// Note that the guest OS may ignore the request.
+    ///
+    /// Additionally, the hypervisor may check and support the domain 'on_poweroff' XML setting resulting in
+    /// a domain that reboots instead of shutting down. For guests that react to a shutdown request,
+    /// the differences from virDomainDestroy() are that the guests disk storage will be in a stable state
+    /// rather than having the (virtual) power cord pulled, and this command returns as soon as the shutdown
+    /// request is issued rather than blocking until the guest is no longer running.
+    pub fn shutdown(&self, dom: &request::Domain) -> ::futures::BoxFuture<(), LibvirtError> {
+        let pl = request::DomainShutdownRequest::new(dom);
+        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_SHUTDOWN, pl).map(|resp| resp.into()).boxed()
+    }
+
+    /// Reboot a domain, the domain object is still usable thereafter, but the domain OS is being stopped for a restart.
+    /// Note that the guest OS may ignore the request.
+    ///
+    /// Additionally, the hypervisor may check and support the domain 'on_reboot' XML setting resulting in a domain that shuts down instead of rebooting.
+    pub fn reboot(&self, dom: &request::Domain) -> ::futures::BoxFuture<(), LibvirtError> {
+        let pl = request::DomainRebootRequest::new(dom, 0);
+        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_REBOOT, pl).map(|resp| resp.into()).boxed()
+    }
+
+    /// Reset a domain immediately without any guest OS shutdown.
+    /// Reset emulates the power reset button on a machine, where all hardware sees the RST line set and reinitializes internal state.
+    ///
+    /// Note that there is a risk of data loss caused by reset without any guest OS shutdown.
+    pub fn reset(&self, dom: &request::Domain) -> ::futures::BoxFuture<(), LibvirtError> {
+        let pl = request::DomainResetRequest::new(dom, 0);
+        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_RESET, pl).map(|resp| resp.into()).boxed()
+    }
+
 }
 
 impl Service for Client {

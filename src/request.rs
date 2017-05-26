@@ -243,11 +243,17 @@ impl DomainDefineXMLRequest {
 delegate_pack_impl!(DomainDefineXMLRequest);
 
 #[derive(Debug)]
-pub struct DomainDefineXMLResponse(LibvirtResponse<generated::remote_domain_define_xml_flags_ret>);
+pub struct DomainDefineXMLResponse(generated::remote_domain_define_xml_flags_ret);
+
+impl ::std::convert::Into<Domain> for DomainDefineXMLResponse {
+    fn into(self) -> Domain {
+        Domain (self.0.dom)
+    }
+}
 
 impl DomainDefineXMLResponse {
     pub fn get_domain(&self) -> Domain {
-        Domain ((self.0).0.dom.clone())
+        Domain ((self.0).dom.clone())
     }
 }
 
@@ -255,6 +261,88 @@ delegate_unpack_impl!(DomainDefineXMLResponse);
 
 impl<R: ::std::io::Read> LibvirtRpc<R> for DomainDefineXMLRequest {
     type Response = DomainDefineXMLResponse;
+}
+
+#[derive(Debug)]
+pub struct DomainShutdownRequest(generated::remote_domain_shutdown_args);
+delegate_pack_impl!(DomainShutdownRequest);
+
+impl DomainShutdownRequest {
+    pub fn new(domain: &Domain) -> Self {
+        let payload = generated::remote_domain_shutdown_args {
+            dom: domain.0.to_owned(),
+        };
+        DomainShutdownRequest(payload)
+    }
+}
+
+pub struct DomainShutdownResponse(());
+delegate_unpack_impl!(DomainShutdownResponse);
+
+impl Into<()> for DomainShutdownResponse {
+    fn into(self) -> () {
+        ()
+    }
+}
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainShutdownRequest {
+    type Response = DomainShutdownResponse;
+}
+
+#[derive(Debug)]
+pub struct DomainRebootRequest(generated::remote_domain_reboot_args);
+delegate_pack_impl!(DomainRebootRequest);
+
+impl DomainRebootRequest {
+    pub fn new(domain: &Domain, flags: u32) -> Self {
+        let payload = generated::remote_domain_reboot_args {
+            dom: domain.0.to_owned(),
+            flags: flags,
+        };
+        DomainRebootRequest(payload)
+    }
+}
+
+#[derive(Debug)]
+pub struct DomainRebootResponse(());
+delegate_unpack_impl!(DomainRebootResponse);
+
+impl Into<()> for DomainRebootResponse {
+    fn into(self) -> () {
+        ()
+    }
+}
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainRebootRequest {
+    type Response = DomainRebootResponse;
+}
+
+#[derive(Debug)]
+pub struct DomainResetRequest(generated::remote_domain_reset_args);
+delegate_pack_impl!(DomainResetRequest);
+
+impl DomainResetRequest {
+    pub fn new(domain: &Domain, flags: u32) -> Self {
+        let payload = generated::remote_domain_reset_args {
+            dom: domain.0.to_owned(),
+            flags: flags,
+        };
+        DomainResetRequest(payload)
+    }
+}
+
+#[derive(Debug)]
+pub struct DomainResetResponse(());
+delegate_unpack_impl!(DomainResetResponse);
+
+impl Into<()> for DomainResetResponse {
+    fn into(self) -> () {
+        ()
+    }
+}
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainResetRequest {
+    type Response = DomainResetResponse;
 }
 
 #[derive(Debug)]
@@ -274,8 +362,14 @@ impl DomainUndefineRequest {
 delegate_pack_impl!(DomainUndefineRequest);
 
 #[derive(Debug)]
-pub struct DomainUndefineResponse(LibvirtResponse<()>);
+pub struct DomainUndefineResponse(());
 delegate_unpack_impl!(DomainUndefineResponse);
+
+impl Into<()> for DomainUndefineResponse {
+    fn into(self) -> () {
+        ()
+    }
+}
 
 impl<R: ::std::io::Read> LibvirtRpc<R> for DomainUndefineRequest {
     type Response = DomainUndefineResponse;
