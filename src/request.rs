@@ -264,6 +264,32 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for DomainDefineXMLRequest {
 }
 
 #[derive(Debug)]
+pub struct DomainShutdownRequest(generated::remote_domain_shutdown_args);
+delegate_pack_impl!(DomainShutdownRequest);
+
+impl DomainShutdownRequest {
+    pub fn new(domain: &Domain) -> Self {
+        let payload = generated::remote_domain_shutdown_args {
+            dom: domain.0.to_owned(),
+        };
+        DomainShutdownRequest(payload)
+    }
+}
+
+pub struct DomainShutdownResponse(());
+delegate_unpack_impl!(DomainShutdownResponse);
+
+impl Into<()> for DomainShutdownResponse {
+    fn into(self) -> () {
+        ()
+    }
+}
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainShutdownRequest {
+    type Response = DomainShutdownResponse;
+}
+
+#[derive(Debug)]
 pub struct DomainUndefineRequest(generated::remote_domain_undefine_flags_args);
 
 impl DomainUndefineRequest {
