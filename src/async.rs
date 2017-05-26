@@ -460,7 +460,7 @@ impl<'a> DomainOperations<'a> {
         self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_SHUTDOWN, pl).map(|resp| resp.into()).boxed()
     }
 
-    // Reboot a domain, the domain object is still usable thereafter, but the domain OS is being stopped for a restart.
+    /// Reboot a domain, the domain object is still usable thereafter, but the domain OS is being stopped for a restart.
     /// Note that the guest OS may ignore the request.
     ///
     /// Additionally, the hypervisor may check and support the domain 'on_reboot' XML setting resulting in a domain that shuts down instead of rebooting.
@@ -468,6 +468,16 @@ impl<'a> DomainOperations<'a> {
         let pl = request::DomainRebootRequest::new(dom, 0);
         self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_REBOOT, pl).map(|resp| resp.into()).boxed()
     }
+
+    /// Reset a domain immediately without any guest OS shutdown.
+    /// Reset emulates the power reset button on a machine, where all hardware sees the RST line set and reinitializes internal state.
+    ///
+    /// Note that there is a risk of data loss caused by reset without any guest OS shutdown.
+    pub fn reset(&self, dom: &request::Domain) -> ::futures::BoxFuture<(), LibvirtError> {
+        let pl = request::DomainResetRequest::new(dom, 0);
+        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_RESET, pl).map(|resp| resp.into()).boxed()
+    }
+
 }
 
 impl Service for Client {

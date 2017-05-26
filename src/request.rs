@@ -318,6 +318,34 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for DomainRebootRequest {
 }
 
 #[derive(Debug)]
+pub struct DomainResetRequest(generated::remote_domain_reset_args);
+delegate_pack_impl!(DomainResetRequest);
+
+impl DomainResetRequest {
+    pub fn new(domain: &Domain, flags: u32) -> Self {
+        let payload = generated::remote_domain_reset_args {
+            dom: domain.0.to_owned(),
+            flags: flags,
+        };
+        DomainResetRequest(payload)
+    }
+}
+
+#[derive(Debug)]
+pub struct DomainResetResponse(());
+delegate_unpack_impl!(DomainResetResponse);
+
+impl Into<()> for DomainResetResponse {
+    fn into(self) -> () {
+        ()
+    }
+}
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for DomainResetRequest {
+    type Response = DomainResetResponse;
+}
+
+#[derive(Debug)]
 pub struct DomainUndefineRequest(generated::remote_domain_undefine_flags_args);
 
 impl DomainUndefineRequest {
