@@ -449,6 +449,7 @@ impl<'a> DomainOperations<'a> {
 
     /// Shutdown a domain, the domain object is still usable thereafter, but the domain OS is being stopped.
     /// Note that the guest OS may ignore the request.
+    ///
     /// Additionally, the hypervisor may check and support the domain 'on_poweroff' XML setting resulting in
     /// a domain that reboots instead of shutting down. For guests that react to a shutdown request,
     /// the differences from virDomainDestroy() are that the guests disk storage will be in a stable state
@@ -457,6 +458,15 @@ impl<'a> DomainOperations<'a> {
     pub fn shutdown(&self, dom: &request::Domain) -> ::futures::BoxFuture<(), LibvirtError> {
         let pl = request::DomainShutdownRequest::new(dom);
         self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_SHUTDOWN, pl).map(|resp| resp.into()).boxed()
+    }
+
+    // Reboot a domain, the domain object is still usable thereafter, but the domain OS is being stopped for a restart.
+    /// Note that the guest OS may ignore the request.
+    ///
+    /// Additionally, the hypervisor may check and support the domain 'on_reboot' XML setting resulting in a domain that shuts down instead of rebooting.
+    pub fn reboot(&self, dom: &request::Domain) -> ::futures::BoxFuture<(), LibvirtError> {
+        let pl = request::DomainRebootRequest::new(dom, 0);
+        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_REBOOT, pl).map(|resp| resp.into()).boxed()
     }
 }
 
