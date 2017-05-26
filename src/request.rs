@@ -243,11 +243,17 @@ impl DomainDefineXMLRequest {
 delegate_pack_impl!(DomainDefineXMLRequest);
 
 #[derive(Debug)]
-pub struct DomainDefineXMLResponse(LibvirtResponse<generated::remote_domain_define_xml_flags_ret>);
+pub struct DomainDefineXMLResponse(generated::remote_domain_define_xml_flags_ret);
+
+impl ::std::convert::Into<Domain> for DomainDefineXMLResponse {
+    fn into(self) -> Domain {
+        Domain (self.0.dom)
+    }
+}
 
 impl DomainDefineXMLResponse {
     pub fn get_domain(&self) -> Domain {
-        Domain ((self.0).0.dom.clone())
+        Domain ((self.0).dom.clone())
     }
 }
 

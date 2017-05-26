@@ -432,6 +432,13 @@ impl<'a> DomainOperations<'a> {
         let pl = request::DomainDestroyRequest::new(dom, flags);
         self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DESTROY_FLAGS, pl).map(|_| ()).boxed()
     }
+
+    /// Defines a domain, but does not start it. This definition is persistent, until explicitly undefined with virDomainUndefine().
+    /// A previous definition for this domain would be overridden if it already exists.
+    pub fn define(&self, xml: &str) -> ::futures::BoxFuture<request::Domain, LibvirtError> {
+        let pl = request::DomainDefineXMLRequest::new(xml, 1); /* TODO: flags */
+        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DEFINE_XML_FLAGS, pl).map(|resp| resp.into()).boxed()
+    }
 }
 
 impl Service for Client {
