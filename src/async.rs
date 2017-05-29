@@ -384,6 +384,18 @@ impl Client {
     pub fn domain(&self) -> DomainOperations {
         DomainOperations{client: self}
     }
+
+    pub fn pool(&self) -> PoolOperations {
+        PoolOperations{client: self}
+    }
+}
+
+/// Operations on libvirt storage pools
+pub struct PoolOperations<'a> {
+    client: &'a Client,
+}
+
+impl<'a> PoolOperations<'a> {
 }
 
 /// Operations on libvirt domains
@@ -393,7 +405,7 @@ pub struct DomainOperations<'a> {
 
 impl<'a> DomainOperations<'a> {
     /// Collect a possibly-filtered list of all domains, and return an allocated array of information for each. 
-    pub fn list(&self, flags: request::flags::ListAllDomainsFlags) -> ::futures::BoxFuture<Vec<request::Domain>, LibvirtError> {
+    pub fn list(&self, flags: request::ListAllDomainFlags::ListAllDomainsFlags) -> ::futures::BoxFuture<Vec<request::Domain>, LibvirtError> {
         let payload = request::ListAllDomainsRequest::new(flags);
         self.client.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_DOMAINS, payload).map(|resp| resp.into()).boxed()
     }
@@ -422,13 +434,13 @@ impl<'a> DomainOperations<'a> {
     /* TODO implement unregister */
 
     /// Launch a defined domain. If the call succeeds the domain moves from the defined to the running domains pools.
-    pub fn start(&self, dom: request::Domain, flags: request::DomainCreateFlags) -> ::futures::BoxFuture<request::Domain, LibvirtError> {
+    pub fn start(&self, dom: request::Domain, flags: request::DomainCreateFlags::DomainCreateFlags) -> ::futures::BoxFuture<request::Domain, LibvirtError> {
         let pl = request::DomainCreateRequest::new(dom, flags);
         self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_CREATE_WITH_FLAGS, pl).map(|resp| resp.into()).boxed()
     }
 
     /// Destroy the domain object. The running instance is shutdown if not down already and all resources used by it are given back to the hypervisor.
-    pub fn destroy(&self, dom: request::Domain, flags: request::DomainDestroyFlags) -> ::futures::BoxFuture<(), LibvirtError> {
+    pub fn destroy(&self, dom: request::Domain, flags: request::DomainDestroyFlags::DomainDestroyFlags) -> ::futures::BoxFuture<(), LibvirtError> {
         let pl = request::DomainDestroyRequest::new(dom, flags);
         self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DESTROY_FLAGS, pl).map(|_| ()).boxed()
     }

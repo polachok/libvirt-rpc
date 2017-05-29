@@ -375,18 +375,20 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for DomainUndefineRequest {
     type Response = DomainUndefineResponse;
 }
 
-bitflags! {
-    pub flags DomainCreateFlags: u32 {
-        /// Launch guest in paused state
-        const START_PAUSED = 1,
-        /// Automatically kill guest when virConnectPtr is closed
-        const START_AUTODESTROY = 2,
-        /// Avoid file system cache pollution
-        const START_BYPASS_CACHE = 4,
-        /// Boot, discarding any managed save
-        const START_FORCE_BOOT = 8,
-        /// Validate the XML document against schema
-        const START_VALIDATE = 16,
+pub mod DomainCreateFlags {
+    bitflags! {
+        pub flags DomainCreateFlags: u32 {
+            /// Launch guest in paused state
+            const START_PAUSED = 1,
+            /// Automatically kill guest when virConnectPtr is closed
+            const START_AUTODESTROY = 2,
+            /// Avoid file system cache pollution
+            const START_BYPASS_CACHE = 4,
+            /// Boot, discarding any managed save
+            const START_FORCE_BOOT = 8,
+            /// Validate the XML document against schema
+            const START_VALIDATE = 16,
+        }
     }
 }
 
@@ -394,7 +396,7 @@ bitflags! {
 pub struct DomainCreateRequest(generated::remote_domain_create_with_flags_args);
 
 impl DomainCreateRequest {
-    pub fn new(domain: Domain, flags: DomainCreateFlags) -> Self {
+    pub fn new(domain: Domain, flags: DomainCreateFlags::DomainCreateFlags) -> Self {
         let payload = generated::remote_domain_create_with_flags_args {
             dom: domain.0,
             flags: flags.bits(),
@@ -426,12 +428,14 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for DomainCreateRequest {
     type Response = DomainCreateResponse;
 }
 
-bitflags! {
-    pub flags DomainDestroyFlags: u32 {
-        /// Default behavior - could lead to data loss!!
-        const DESTROY_DEFAULT = 0,
-        /// Only SIGTERM, no SIGKILL
-        const DESTROY_GRACEFUL = 1,
+pub mod DomainDestroyFlags {
+    bitflags! {
+        pub flags DomainDestroyFlags: u32 {
+            /// Default behavior - could lead to data loss!!
+            const DESTROY_DEFAULT = 0,
+            /// Only SIGTERM, no SIGKILL
+            const DESTROY_GRACEFUL = 1,
+        }
     }
 }
 
@@ -440,7 +444,7 @@ pub struct DomainDestroyRequest(generated::remote_domain_destroy_flags_args);
 delegate_pack_impl!(DomainDestroyRequest);
 
 impl DomainDestroyRequest {
-    pub fn new(dom: Domain, flags: DomainDestroyFlags) -> Self {
+    pub fn new(dom: Domain, flags: DomainDestroyFlags::DomainDestroyFlags) -> Self {
         let payload = generated::remote_domain_destroy_flags_args {
             dom: dom.0,
             flags: flags.bits(),
@@ -457,7 +461,7 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for DomainDestroyRequest {
     type Response = DomainDestroyResponse;
 }
 
-pub mod flags {
+pub mod ListAllDomainFlags {
     bitflags! {
         pub flags ListAllDomainsFlags: u32 {
             const DOMAINS_ACTIVE	=	1,
@@ -482,7 +486,7 @@ pub mod flags {
 pub struct ListAllDomainsRequest(generated::remote_connect_list_all_domains_args);
 
 impl ListAllDomainsRequest {
-    pub fn new(flags: flags::ListAllDomainsFlags) -> Self {
+    pub fn new(flags: ListAllDomainFlags::ListAllDomainsFlags) -> Self {
         let payload = generated::remote_connect_list_all_domains_args {
             need_results: 1,
             flags: flags.bits(),
