@@ -862,3 +862,30 @@ impl Into<StoragePool> for StoragePoolDefineXmlResponse {
 impl<R: ::std::io::Read> LibvirtRpc<R> for StoragePoolDefineXmlRequest {
     type Response = StoragePoolDefineXmlResponse;
 }
+
+#[derive(Debug)]
+pub struct StoragePoolLookupByUuidRequest(generated::remote_storage_pool_lookup_by_uuid_args);
+delegate_pack_impl!(StoragePoolLookupByUuidRequest);
+
+impl StoragePoolLookupByUuidRequest {
+    pub fn new(uuid: &::uuid::Uuid) -> Self {
+        let payload = generated::remote_storage_pool_lookup_by_uuid_args {
+            uuid: generated::remote_uuid(uuid.as_bytes().clone()),
+        };
+        StoragePoolLookupByUuidRequest(payload)
+    }
+}
+
+#[derive(Debug)]
+pub struct StoragePoolLookupByUuidResponse(generated::remote_storage_pool_lookup_by_uuid_ret);
+delegate_unpack_impl!(StoragePoolLookupByUuidResponse);
+
+impl Into<StoragePool> for StoragePoolLookupByUuidResponse {
+    fn into(self) -> StoragePool {
+        StoragePool(self.0.pool)
+    }
+}
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for StoragePoolLookupByUuidRequest {
+    type Response = StoragePoolLookupByUuidResponse;
+}

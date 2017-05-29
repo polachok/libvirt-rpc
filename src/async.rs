@@ -407,6 +407,11 @@ impl<'a> PoolOperations<'a> {
         let payload = request::StoragePoolDefineXmlRequest::new(xml);
         self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_DEFINE_XML, payload).map(|resp| resp.into()).boxed()
     }
+
+    pub fn lookup_by_uuid(&self, uuid: &::uuid::Uuid) -> ::futures::BoxFuture<request::StoragePool, LibvirtError> {
+        let payload = request::StoragePoolLookupByUuidRequest::new(uuid);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LOOKUP_BY_UUID, payload).map(|resp| resp.into()).boxed()
+    }
 }
 
 /// Operations on libvirt domains
