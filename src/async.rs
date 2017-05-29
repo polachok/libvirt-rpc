@@ -21,7 +21,7 @@
 //!     let result = core.run({
 //!         client.auth()
 //!           .and_then(|_| client.open())
-//!           .and_then(|_| client.domain().list(request::flags::DOMAINS_ACTIVE | request::flags::DOMAINS_INACTIVE))
+//!           .and_then(|_| client.domain().list(request::ListAllDomainsFlags::DOMAINS_ACTIVE | request::ListAllDomainsFlags::DOMAINS_INACTIVE))
 //!     }).unwrap();
 //!     println!("{:?}", result);
 //! }
@@ -520,10 +520,11 @@ fn such_async() {
         client.auth()
             .and_then(|_| client.open())
             .and_then(|_| client.version())
-            .and_then(|_| client.domain().list(request::flags::DOMAINS_ACTIVE | request::flags::DOMAINS_INACTIVE))
+            .and_then(|_| client.domain().list(request::ListAllDomainFlags::DOMAINS_ACTIVE | request::ListAllDomainFlags::DOMAINS_INACTIVE))
+            .and_then(|_| client.pool().list(request::ListAllStoragePoolsFlags::ListAllStoragePoolsFlags::empty()).map(|list| println!("{:?}",list)))
             .and_then(|_| client.domain().lookup_by_uuid(&uuid))
             .and_then(|dom| {
-                client.domain().start(dom, request::DomainCreateFlags::empty())
+                client.domain().start(dom, request::DomainCreateFlags::DomainCreateFlags::empty())
             }).and_then(|dom| {
                 client.domain().register_event(&dom, 0)
             }).and_then(|events| {
