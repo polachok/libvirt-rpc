@@ -396,6 +396,10 @@ pub struct PoolOperations<'a> {
 }
 
 impl<'a> PoolOperations<'a> {
+    pub fn list(&self, flags: request::ListAllStoragePoolsFlags::ListAllStoragePoolsFlags) -> ::futures::BoxFuture<Vec<request::StoragePool>, LibvirtError> {
+        let payload = request::ListAllStoragePoolsRequest::new(flags);
+        self.client.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_STORAGE_POOLS, payload).map(|resp| resp.into()).boxed()
+    }
 }
 
 /// Operations on libvirt domains

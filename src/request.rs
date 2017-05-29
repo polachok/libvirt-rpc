@@ -765,3 +765,72 @@ impl From<generated::remote_domain_event_callback_lifecycle_msg> for DomainEvent
         DomainEvent { domain, info }
     }
 }
+
+// http://libvirt.org/html/libvirt-libvirt-storage.html#virConnectListAllStoragePoolsFlags
+pub mod ListAllStoragePoolsFlags {
+    bitflags! {
+        pub flags ListAllStoragePoolsFlags: u32 {
+            const LIST_STORAGE_POOLS_INACTIVE	=	1,
+            const LIST_STORAGE_POOLS_ACTIVE	=	2,
+            const LIST_STORAGE_POOLS_PERSISTENT	=	4,
+            const LIST_STORAGE_POOLS_TRANSIENT	=	8,
+            const LIST_STORAGE_POOLS_AUTOSTART	=	16,
+            const LIST_STORAGE_POOLS_NO_AUTOSTART	=	32,
+            // List pools by type
+            const LIST_STORAGE_POOLS_DIR	=	64,
+            const LIST_STORAGE_POOLS_FS	=	128,
+            const LIST_STORAGE_POOLS_NETFS	=	256,
+            const LIST_STORAGE_POOLS_LOGICAL	=	512,
+            const LIST_STORAGE_POOLS_DISK	=	1024,
+            const LIST_STORAGE_POOLS_ISCSI	=	2048,
+            const LIST_STORAGE_POOLS_SCSI	=	4096,
+            const LIST_STORAGE_POOLS_MPATH	=	8192,
+            const LIST_STORAGE_POOLS_RBD	=	16384,
+            const LIST_STORAGE_POOLS_SHEEPDOG	=	32768,
+            const LIST_STORAGE_POOLS_GLUSTER	=	65536,
+            const LIST_STORAGE_POOLS_ZFS	=	131072,
+            const LIST_STORAGE_POOLS_VSTORAGE = 262144,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct StoragePool(generated::remote_nonnull_storage_pool);
+
+impl From<generated::remote_nonnull_storage_pool> for StoragePool {
+    fn from(inner: generated::remote_nonnull_storage_pool) -> Self {
+        StoragePool(inner)
+    }
+}
+
+#[derive(Debug)]
+pub struct ListAllStoragePoolsRequest(generated::remote_connect_list_all_storage_pools_args);
+delegate_pack_impl!(ListAllStoragePoolsRequest);
+
+impl ListAllStoragePoolsRequest {
+    pub fn new(flags: ListAllStoragePoolsFlags::ListAllStoragePoolsFlags) -> Self {
+        let pl = generated::remote_connect_list_all_storage_pools_args {
+            need_results: 1,
+            flags: flags.bits(),
+        };
+        ListAllStoragePoolsRequest(pl)
+    }
+}
+
+#[derive(Debug)]
+pub struct ListAllStoragePoolsResponse(generated::remote_connect_list_all_storage_pools_ret);
+delegate_unpack_impl!(ListAllStoragePoolsResponse);
+
+impl Into<Vec<StoragePool>> for ListAllStoragePoolsResponse {
+    fn into(self) -> Vec<StoragePool> {
+        let mut result = Vec::new();
+        for pool in self.0.pools {
+            result.push(pool.into());
+        }
+        result
+    }
+}
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for ListAllStoragePoolsRequest {
+    type Response = ListAllStoragePoolsResponse;
+}
