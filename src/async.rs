@@ -396,9 +396,16 @@ pub struct PoolOperations<'a> {
 }
 
 impl<'a> PoolOperations<'a> {
+    /// Collect the list of storage pools
     pub fn list(&self, flags: request::ListAllStoragePoolsFlags::ListAllStoragePoolsFlags) -> ::futures::BoxFuture<Vec<request::StoragePool>, LibvirtError> {
         let payload = request::ListAllStoragePoolsRequest::new(flags);
         self.client.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_STORAGE_POOLS, payload).map(|resp| resp.into()).boxed()
+    }
+
+    /// Define an inactive persistent storage pool or modify an existing persistent one from the XML description.
+    pub fn define(&self, xml: &str) -> ::futures::BoxFuture<request::StoragePool, LibvirtError> {
+        let payload = request::StoragePoolDefineXmlRequest::new(xml);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_DEFINE_XML, payload).map(|resp| resp.into()).boxed()
     }
 }
 

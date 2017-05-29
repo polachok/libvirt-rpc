@@ -834,3 +834,31 @@ impl Into<Vec<StoragePool>> for ListAllStoragePoolsResponse {
 impl<R: ::std::io::Read> LibvirtRpc<R> for ListAllStoragePoolsRequest {
     type Response = ListAllStoragePoolsResponse;
 }
+
+#[derive(Debug)]
+pub struct StoragePoolDefineXmlRequest(generated::remote_storage_pool_define_xml_args);
+delegate_pack_impl!(StoragePoolDefineXmlRequest);
+
+impl StoragePoolDefineXmlRequest {
+    pub fn new(xml: &str) -> Self {
+        let payload = generated::remote_storage_pool_define_xml_args {
+            xml: generated::remote_nonnull_string(xml.to_string()),
+            flags: 0,
+        };
+        StoragePoolDefineXmlRequest(payload)
+    }
+}
+
+#[derive(Debug)]
+pub struct StoragePoolDefineXmlResponse(generated::remote_storage_pool_define_xml_ret);
+delegate_unpack_impl!(StoragePoolDefineXmlResponse);
+
+impl Into<StoragePool> for StoragePoolDefineXmlResponse {
+    fn into(self) -> StoragePool {
+        StoragePool(self.0.pool)
+    }
+}
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for StoragePoolDefineXmlRequest {
+    type Response = StoragePoolDefineXmlResponse;
+}
