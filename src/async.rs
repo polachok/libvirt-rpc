@@ -302,9 +302,10 @@ impl<T> Stream for EventStream<T> {
 }
 
 /// Libvirt client
+#[derive(Clone)]
 pub struct Client {
     events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
-    inner: multiplex::ClientService<::tokio_uds::UnixStream, LibvirtProto>,
+    inner: Arc<Mutex<multiplex::ClientService<::tokio_uds::UnixStream, LibvirtProto>>>,
 }
 
 impl Client {
@@ -315,7 +316,7 @@ impl Client {
         let proto = LibvirtProto { events: events.clone() };
         UnixClient::new(proto)
                 .connect(path, handle)
-                .map(|inner| Client { inner: inner, events: events.clone() })
+                .map(|inner| Client { inner: Arc::new(Mutex::new(inner)), events: events.clone() })
     }
 
     fn pack<P: Pack<::bytes::Writer<::bytes::BytesMut>>>(procedure: request::remote_procedure, payload: P) -> Result<LibvirtRequest, ::xdr_codec::Error> {
@@ -408,6 +409,7 @@ impl<'a> PoolOperations<'a> {
         self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_DEFINE_XML, payload).map(|resp| resp.into()).boxed()
     }
 
+    /// Fetch a storage pool based on its globally unique id
     pub fn lookup_by_uuid(&self, uuid: &::uuid::Uuid) -> ::futures::BoxFuture<request::StoragePool, LibvirtError> {
         let payload = request::StoragePoolLookupByUuidRequest::new(uuid);
         self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LOOKUP_BY_UUID, payload).map(|resp| resp.into()).boxed()
@@ -515,7 +517,8 @@ impl Service for Client {
     type Future = ::futures::BoxFuture<Self::Response, Self::Error>;
 
     fn call(&self, req: Self::Request) -> Self::Future {
-        self.inner.call(req).boxed()
+        let inner = self.inner.lock().unwrap();
+        inner.call(req).boxed()
     }
 }
 
