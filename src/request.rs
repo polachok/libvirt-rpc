@@ -375,18 +375,20 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for DomainUndefineRequest {
     type Response = DomainUndefineResponse;
 }
 
-bitflags! {
-    pub flags DomainCreateFlags: u32 {
-        /// Launch guest in paused state
-        const START_PAUSED = 1,
-        /// Automatically kill guest when virConnectPtr is closed
-        const START_AUTODESTROY = 2,
-        /// Avoid file system cache pollution
-        const START_BYPASS_CACHE = 4,
-        /// Boot, discarding any managed save
-        const START_FORCE_BOOT = 8,
-        /// Validate the XML document against schema
-        const START_VALIDATE = 16,
+pub mod DomainCreateFlags {
+    bitflags! {
+        pub flags DomainCreateFlags: u32 {
+            /// Launch guest in paused state
+            const START_PAUSED = 1,
+            /// Automatically kill guest when virConnectPtr is closed
+            const START_AUTODESTROY = 2,
+            /// Avoid file system cache pollution
+            const START_BYPASS_CACHE = 4,
+            /// Boot, discarding any managed save
+            const START_FORCE_BOOT = 8,
+            /// Validate the XML document against schema
+            const START_VALIDATE = 16,
+        }
     }
 }
 
@@ -394,7 +396,7 @@ bitflags! {
 pub struct DomainCreateRequest(generated::remote_domain_create_with_flags_args);
 
 impl DomainCreateRequest {
-    pub fn new(domain: Domain, flags: DomainCreateFlags) -> Self {
+    pub fn new(domain: Domain, flags: DomainCreateFlags::DomainCreateFlags) -> Self {
         let payload = generated::remote_domain_create_with_flags_args {
             dom: domain.0,
             flags: flags.bits(),
@@ -426,12 +428,14 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for DomainCreateRequest {
     type Response = DomainCreateResponse;
 }
 
-bitflags! {
-    pub flags DomainDestroyFlags: u32 {
-        /// Default behavior - could lead to data loss!!
-        const DESTROY_DEFAULT = 0,
-        /// Only SIGTERM, no SIGKILL
-        const DESTROY_GRACEFUL = 1,
+pub mod DomainDestroyFlags {
+    bitflags! {
+        pub flags DomainDestroyFlags: u32 {
+            /// Default behavior - could lead to data loss!!
+            const DESTROY_DEFAULT = 0,
+            /// Only SIGTERM, no SIGKILL
+            const DESTROY_GRACEFUL = 1,
+        }
     }
 }
 
@@ -440,7 +444,7 @@ pub struct DomainDestroyRequest(generated::remote_domain_destroy_flags_args);
 delegate_pack_impl!(DomainDestroyRequest);
 
 impl DomainDestroyRequest {
-    pub fn new(dom: Domain, flags: DomainDestroyFlags) -> Self {
+    pub fn new(dom: Domain, flags: DomainDestroyFlags::DomainDestroyFlags) -> Self {
         let payload = generated::remote_domain_destroy_flags_args {
             dom: dom.0,
             flags: flags.bits(),
@@ -457,7 +461,7 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for DomainDestroyRequest {
     type Response = DomainDestroyResponse;
 }
 
-pub mod flags {
+pub mod ListAllDomainFlags {
     bitflags! {
         pub flags ListAllDomainsFlags: u32 {
             const DOMAINS_ACTIVE	=	1,
@@ -482,7 +486,7 @@ pub mod flags {
 pub struct ListAllDomainsRequest(generated::remote_connect_list_all_domains_args);
 
 impl ListAllDomainsRequest {
-    pub fn new(flags: flags::ListAllDomainsFlags) -> Self {
+    pub fn new(flags: ListAllDomainFlags::ListAllDomainsFlags) -> Self {
         let payload = generated::remote_connect_list_all_domains_args {
             need_results: 1,
             flags: flags.bits(),
@@ -760,4 +764,128 @@ impl From<generated::remote_domain_event_callback_lifecycle_msg> for DomainEvent
         let domain = Domain(ev.msg.dom);
         DomainEvent { domain, info }
     }
+}
+
+// http://libvirt.org/html/libvirt-libvirt-storage.html#virConnectListAllStoragePoolsFlags
+pub mod ListAllStoragePoolsFlags {
+    bitflags! {
+        pub flags ListAllStoragePoolsFlags: u32 {
+            const LIST_STORAGE_POOLS_INACTIVE	=	1,
+            const LIST_STORAGE_POOLS_ACTIVE	=	2,
+            const LIST_STORAGE_POOLS_PERSISTENT	=	4,
+            const LIST_STORAGE_POOLS_TRANSIENT	=	8,
+            const LIST_STORAGE_POOLS_AUTOSTART	=	16,
+            const LIST_STORAGE_POOLS_NO_AUTOSTART	=	32,
+            // List pools by type
+            const LIST_STORAGE_POOLS_DIR	=	64,
+            const LIST_STORAGE_POOLS_FS	=	128,
+            const LIST_STORAGE_POOLS_NETFS	=	256,
+            const LIST_STORAGE_POOLS_LOGICAL	=	512,
+            const LIST_STORAGE_POOLS_DISK	=	1024,
+            const LIST_STORAGE_POOLS_ISCSI	=	2048,
+            const LIST_STORAGE_POOLS_SCSI	=	4096,
+            const LIST_STORAGE_POOLS_MPATH	=	8192,
+            const LIST_STORAGE_POOLS_RBD	=	16384,
+            const LIST_STORAGE_POOLS_SHEEPDOG	=	32768,
+            const LIST_STORAGE_POOLS_GLUSTER	=	65536,
+            const LIST_STORAGE_POOLS_ZFS	=	131072,
+            const LIST_STORAGE_POOLS_VSTORAGE = 262144,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct StoragePool(generated::remote_nonnull_storage_pool);
+
+impl From<generated::remote_nonnull_storage_pool> for StoragePool {
+    fn from(inner: generated::remote_nonnull_storage_pool) -> Self {
+        StoragePool(inner)
+    }
+}
+
+#[derive(Debug)]
+pub struct ListAllStoragePoolsRequest(generated::remote_connect_list_all_storage_pools_args);
+delegate_pack_impl!(ListAllStoragePoolsRequest);
+
+impl ListAllStoragePoolsRequest {
+    pub fn new(flags: ListAllStoragePoolsFlags::ListAllStoragePoolsFlags) -> Self {
+        let pl = generated::remote_connect_list_all_storage_pools_args {
+            need_results: 1,
+            flags: flags.bits(),
+        };
+        ListAllStoragePoolsRequest(pl)
+    }
+}
+
+#[derive(Debug)]
+pub struct ListAllStoragePoolsResponse(generated::remote_connect_list_all_storage_pools_ret);
+delegate_unpack_impl!(ListAllStoragePoolsResponse);
+
+impl Into<Vec<StoragePool>> for ListAllStoragePoolsResponse {
+    fn into(self) -> Vec<StoragePool> {
+        let mut result = Vec::new();
+        for pool in self.0.pools {
+            result.push(pool.into());
+        }
+        result
+    }
+}
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for ListAllStoragePoolsRequest {
+    type Response = ListAllStoragePoolsResponse;
+}
+
+#[derive(Debug)]
+pub struct StoragePoolDefineXmlRequest(generated::remote_storage_pool_define_xml_args);
+delegate_pack_impl!(StoragePoolDefineXmlRequest);
+
+impl StoragePoolDefineXmlRequest {
+    pub fn new(xml: &str) -> Self {
+        let payload = generated::remote_storage_pool_define_xml_args {
+            xml: generated::remote_nonnull_string(xml.to_string()),
+            flags: 0,
+        };
+        StoragePoolDefineXmlRequest(payload)
+    }
+}
+
+#[derive(Debug)]
+pub struct StoragePoolDefineXmlResponse(generated::remote_storage_pool_define_xml_ret);
+delegate_unpack_impl!(StoragePoolDefineXmlResponse);
+
+impl Into<StoragePool> for StoragePoolDefineXmlResponse {
+    fn into(self) -> StoragePool {
+        StoragePool(self.0.pool)
+    }
+}
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for StoragePoolDefineXmlRequest {
+    type Response = StoragePoolDefineXmlResponse;
+}
+
+#[derive(Debug)]
+pub struct StoragePoolLookupByUuidRequest(generated::remote_storage_pool_lookup_by_uuid_args);
+delegate_pack_impl!(StoragePoolLookupByUuidRequest);
+
+impl StoragePoolLookupByUuidRequest {
+    pub fn new(uuid: &::uuid::Uuid) -> Self {
+        let payload = generated::remote_storage_pool_lookup_by_uuid_args {
+            uuid: generated::remote_uuid(uuid.as_bytes().clone()),
+        };
+        StoragePoolLookupByUuidRequest(payload)
+    }
+}
+
+#[derive(Debug)]
+pub struct StoragePoolLookupByUuidResponse(generated::remote_storage_pool_lookup_by_uuid_ret);
+delegate_unpack_impl!(StoragePoolLookupByUuidResponse);
+
+impl Into<StoragePool> for StoragePoolLookupByUuidResponse {
+    fn into(self) -> StoragePool {
+        StoragePool(self.0.pool)
+    }
+}
+
+impl<R: ::std::io::Read> LibvirtRpc<R> for StoragePoolLookupByUuidRequest {
+    type Response = StoragePoolLookupByUuidResponse;
 }

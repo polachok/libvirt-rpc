@@ -21,7 +21,7 @@
 //!     let result = core.run({
 //!         client.auth()
 //!           .and_then(|_| client.open())
-//!           .and_then(|_| client.domain().list(request::flags::DOMAINS_ACTIVE | request::flags::DOMAINS_INACTIVE))
+//!           .and_then(|_| client.domain().list(request::ListAllDomainsFlags::DOMAINS_ACTIVE | request::ListAllDomainsFlags::DOMAINS_INACTIVE))
 //!     }).unwrap();
 //!     println!("{:?}", result);
 //! }
@@ -302,9 +302,10 @@ impl<T> Stream for EventStream<T> {
 }
 
 /// Libvirt client
+#[derive(Clone)]
 pub struct Client {
     events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
-    inner: multiplex::ClientService<::tokio_uds::UnixStream, LibvirtProto>,
+    inner: Arc<Mutex<multiplex::ClientService<::tokio_uds::UnixStream, LibvirtProto>>>,
 }
 
 impl Client {
@@ -315,7 +316,7 @@ impl Client {
         let proto = LibvirtProto { events: events.clone() };
         UnixClient::new(proto)
                 .connect(path, handle)
-                .map(|inner| Client { inner: inner, events: events.clone() })
+                .map(|inner| Client { inner: Arc::new(Mutex::new(inner)), events: events.clone() })
     }
 
     fn pack<P: Pack<::bytes::Writer<::bytes::BytesMut>>>(procedure: request::remote_procedure, payload: P) -> Result<LibvirtRequest, ::xdr_codec::Error> {
@@ -384,6 +385,35 @@ impl Client {
     pub fn domain(&self) -> DomainOperations {
         DomainOperations{client: self}
     }
+
+    pub fn pool(&self) -> PoolOperations {
+        PoolOperations{client: self}
+    }
+}
+
+/// Operations on libvirt storage pools
+pub struct PoolOperations<'a> {
+    client: &'a Client,
+}
+
+impl<'a> PoolOperations<'a> {
+    /// Collect the list of storage pools
+    pub fn list(&self, flags: request::ListAllStoragePoolsFlags::ListAllStoragePoolsFlags) -> ::futures::BoxFuture<Vec<request::StoragePool>, LibvirtError> {
+        let payload = request::ListAllStoragePoolsRequest::new(flags);
+        self.client.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_STORAGE_POOLS, payload).map(|resp| resp.into()).boxed()
+    }
+
+    /// Define an inactive persistent storage pool or modify an existing persistent one from the XML description.
+    pub fn define(&self, xml: &str) -> ::futures::BoxFuture<request::StoragePool, LibvirtError> {
+        let payload = request::StoragePoolDefineXmlRequest::new(xml);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_DEFINE_XML, payload).map(|resp| resp.into()).boxed()
+    }
+
+    /// Fetch a storage pool based on its globally unique id
+    pub fn lookup_by_uuid(&self, uuid: &::uuid::Uuid) -> ::futures::BoxFuture<request::StoragePool, LibvirtError> {
+        let payload = request::StoragePoolLookupByUuidRequest::new(uuid);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LOOKUP_BY_UUID, payload).map(|resp| resp.into()).boxed()
+    }
 }
 
 /// Operations on libvirt domains
@@ -393,7 +423,7 @@ pub struct DomainOperations<'a> {
 
 impl<'a> DomainOperations<'a> {
     /// Collect a possibly-filtered list of all domains, and return an allocated array of information for each. 
-    pub fn list(&self, flags: request::flags::ListAllDomainsFlags) -> ::futures::BoxFuture<Vec<request::Domain>, LibvirtError> {
+    pub fn list(&self, flags: request::ListAllDomainFlags::ListAllDomainsFlags) -> ::futures::BoxFuture<Vec<request::Domain>, LibvirtError> {
         let payload = request::ListAllDomainsRequest::new(flags);
         self.client.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_DOMAINS, payload).map(|resp| resp.into()).boxed()
     }
@@ -422,13 +452,13 @@ impl<'a> DomainOperations<'a> {
     /* TODO implement unregister */
 
     /// Launch a defined domain. If the call succeeds the domain moves from the defined to the running domains pools.
-    pub fn start(&self, dom: request::Domain, flags: request::DomainCreateFlags) -> ::futures::BoxFuture<request::Domain, LibvirtError> {
+    pub fn start(&self, dom: request::Domain, flags: request::DomainCreateFlags::DomainCreateFlags) -> ::futures::BoxFuture<request::Domain, LibvirtError> {
         let pl = request::DomainCreateRequest::new(dom, flags);
         self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_CREATE_WITH_FLAGS, pl).map(|resp| resp.into()).boxed()
     }
 
     /// Destroy the domain object. The running instance is shutdown if not down already and all resources used by it are given back to the hypervisor.
-    pub fn destroy(&self, dom: request::Domain, flags: request::DomainDestroyFlags) -> ::futures::BoxFuture<(), LibvirtError> {
+    pub fn destroy(&self, dom: request::Domain, flags: request::DomainDestroyFlags::DomainDestroyFlags) -> ::futures::BoxFuture<(), LibvirtError> {
         let pl = request::DomainDestroyRequest::new(dom, flags);
         self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DESTROY_FLAGS, pl).map(|_| ()).boxed()
     }
@@ -487,7 +517,8 @@ impl Service for Client {
     type Future = ::futures::BoxFuture<Self::Response, Self::Error>;
 
     fn call(&self, req: Self::Request) -> Self::Future {
-        self.inner.call(req).boxed()
+        let inner = self.inner.lock().unwrap();
+        inner.call(req).boxed()
     }
 }
 
@@ -504,10 +535,11 @@ fn such_async() {
         client.auth()
             .and_then(|_| client.open())
             .and_then(|_| client.version())
-            .and_then(|_| client.domain().list(request::flags::DOMAINS_ACTIVE | request::flags::DOMAINS_INACTIVE))
+            .and_then(|_| client.domain().list(request::ListAllDomainFlags::DOMAINS_ACTIVE | request::ListAllDomainFlags::DOMAINS_INACTIVE))
+            .and_then(|_| client.pool().list(request::ListAllStoragePoolsFlags::ListAllStoragePoolsFlags::empty()).map(|list| println!("{:?}",list)))
             .and_then(|_| client.domain().lookup_by_uuid(&uuid))
             .and_then(|dom| {
-                client.domain().start(dom, request::DomainCreateFlags::empty())
+                client.domain().start(dom, request::DomainCreateFlags::DomainCreateFlags::empty())
             }).and_then(|dom| {
                 client.domain().register_event(&dom, 0)
             }).and_then(|events| {

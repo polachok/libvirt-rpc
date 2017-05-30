@@ -240,7 +240,7 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
 
     pub fn start(&mut self, dom: Domain) -> Result<Domain, LibvirtError> {
         use request::remote_procedure::*;
-        let req = self.make_request(REMOTE_PROC_DOMAIN_CREATE_WITH_FLAGS, DomainCreateRequest::new(dom, DomainCreateFlags::empty()));
+        let req = self.make_request(REMOTE_PROC_DOMAIN_CREATE_WITH_FLAGS, DomainCreateRequest::new(dom, DomainCreateFlags::DomainCreateFlags::empty()));
 
         let pkt: DomainCreateResponse = try!(self.request(req));
         let dom = pkt.get_domain();
