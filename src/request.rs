@@ -765,3 +765,63 @@ impl Into<StoragePool> for StoragePoolLookupByUuidResponse {
         StoragePool(self.0.pool)
     }
 }
+
+use generated::remote_storage_pool_create_args;
+req!(StoragePoolCreateRequest: remote_storage_pool_create_args {
+    pool: &StoragePool => pool.0.clone(),
+    flags: u32 => flags
+});
+resp!(StoragePoolCreateResponse);
+rpc!(StoragePoolCreateRequest => StoragePoolCreateResponse);
+
+use generated::remote_storage_pool_destroy_args;
+req!(StoragePoolDestroyRequest: remote_storage_pool_destroy_args {
+    pool: &StoragePool => pool.0.clone()
+});
+resp!(StoragePoolDestroyResponse);
+rpc!(StoragePoolDestroyRequest => StoragePoolDestroyResponse);
+
+use generated::remote_storage_pool_undefine_args;
+req!(StoragePoolUndefineRequest: remote_storage_pool_undefine_args {
+    pool: StoragePool => pool.0
+});
+resp!(StoragePoolUndefineResponse);
+rpc!(StoragePoolUndefineRequest => StoragePoolUndefineResponse);
+
+use generated::remote_storage_pool_list_volumes_args;
+req!(StoragePoolListVolumesRequest: remote_storage_pool_list_volumes_args {
+    pool: &StoragePool => pool.0.clone(),
+    maxnames: i32 => maxnames
+});
+resp!(StoragePoolListVolumesResponse: generated::remote_storage_pool_list_volumes_ret);
+rpc!(StoragePoolListVolumesRequest => StoragePoolListVolumesResponse);
+
+impl Into<Vec<String>> for StoragePoolListVolumesResponse {
+    fn into(self) -> Vec<String> {
+        self.0.names.into_iter().map(|nns| nns.0).collect()
+    }
+}
+
+#[derive(Debug)]
+pub struct Volume(generated::remote_nonnull_storage_vol);
+
+impl From<generated::remote_nonnull_storage_vol> for Volume {
+    fn from(inner: generated::remote_nonnull_storage_vol) -> Self {
+        Volume(inner)
+    }
+}
+
+use generated::remote_storage_pool_list_all_volumes_args;
+req!(StoragePoolListAllVolumesRequest: remote_storage_pool_list_all_volumes_args {
+    pool: &StoragePool => pool.0.clone(),
+    need_results: i32 => need_results,
+    flags: u32 => flags
+});
+resp!(StoragePoolListAllVolumesResponse: generated::remote_storage_pool_list_all_volumes_ret);
+rpc!(StoragePoolListAllVolumesRequest => StoragePoolListAllVolumesResponse);
+
+impl Into<Vec<Volume>> for StoragePoolListAllVolumesResponse {
+    fn into(self) -> Vec<Volume> {
+        self.0.vols.into_iter().map(|vol| vol.into()).collect()
+    }
+}
