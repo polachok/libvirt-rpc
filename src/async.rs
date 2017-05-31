@@ -433,6 +433,12 @@ impl<'a> PoolOperations<'a> {
         let payload = request::StoragePoolUndefineRequest::new(pool);
         self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_UNDEFINE, payload).map(|resp| resp.into()).boxed()
     }
+
+    /// Fetch list of storage volume names
+    pub fn list_volume_names(&self, pool: &request::StoragePool) -> ::futures::BoxFuture<Vec<String>, LibvirtError> {
+        let payload = request::StoragePoolListVolumesRequest::new(pool, request::generated::REMOTE_STORAGE_VOL_LIST_MAX as i32);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LIST_VOLUMES, payload).map(|resp| resp.into()).boxed()
+    }
 }
 
 /// Operations on libvirt domains

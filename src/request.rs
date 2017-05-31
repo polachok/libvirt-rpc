@@ -788,3 +788,17 @@ req!(StoragePoolUndefineRequest: remote_storage_pool_undefine_args {
 resp!(StoragePoolUndefineResponse);
 rpc!(StoragePoolUndefineRequest => StoragePoolUndefineResponse);
 
+use generated::remote_storage_pool_list_volumes_args;
+req!(StoragePoolListVolumesRequest: remote_storage_pool_list_volumes_args {
+    pool: &StoragePool => pool.0.clone(),
+    maxnames: i32 => maxnames
+});
+resp!(StoragePoolListVolumesResponse: generated::remote_storage_pool_list_volumes_ret);
+rpc!(StoragePoolListVolumesRequest => StoragePoolListVolumesResponse);
+
+impl Into<Vec<String>> for StoragePoolListVolumesResponse {
+    fn into(self) -> Vec<String> {
+        self.0.names.into_iter().map(|nns| nns.0).collect()
+    }
+}
+
