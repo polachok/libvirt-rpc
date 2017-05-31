@@ -765,3 +765,18 @@ impl Into<StoragePool> for StoragePoolLookupByUuidResponse {
         StoragePool(self.0.pool)
     }
 }
+
+use generated::remote_storage_pool_create_args;
+req!(StoragePoolCreateRequest: remote_storage_pool_create_args {
+    pool: &StoragePool => pool.0.clone(),
+    flags: u32 => flags
+});
+resp!(StoragePoolCreateResponse);
+rpc!(StoragePoolCreateRequest => StoragePoolCreateResponse);
+
+use generated::remote_storage_pool_destroy_args;
+req!(StoragePoolDestroyRequest: remote_storage_pool_destroy_args {
+    pool: &StoragePool => pool.0.clone()
+});
+resp!(StoragePoolDestroyResponse);
+rpc!(StoragePoolDestroyRequest => StoragePoolDestroyResponse);

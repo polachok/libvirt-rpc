@@ -414,6 +414,19 @@ impl<'a> PoolOperations<'a> {
         let payload = request::StoragePoolLookupByUuidRequest::new(uuid);
         self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LOOKUP_BY_UUID, payload).map(|resp| resp.into()).boxed()
     }
+
+    /// Starts an inactive storage pool
+    pub fn start(&self, pool: &request::StoragePool) -> ::futures::BoxFuture<(), LibvirtError> {
+        let payload = request::StoragePoolCreateRequest::new(pool, 0);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_CREATE, payload).map(|resp| resp.into()).boxed()
+    }
+
+    /// Destroy an active storage pool. This will deactivate the pool on the host, but keep any persistent config associated with it.
+    /// If it has a persistent config it can later be restarted with start()
+    pub fn destroy(&self, pool: &request::StoragePool) -> ::futures::BoxFuture<(), LibvirtError> {
+        let payload = request::StoragePoolDestroyRequest::new(pool);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_DESTROY, payload).map(|resp| resp.into()).boxed()
+    }
 }
 
 /// Operations on libvirt domains
