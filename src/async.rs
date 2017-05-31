@@ -439,6 +439,12 @@ impl<'a> PoolOperations<'a> {
         let payload = request::StoragePoolListVolumesRequest::new(pool, request::generated::REMOTE_STORAGE_VOL_LIST_MAX as i32);
         self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LIST_VOLUMES, payload).map(|resp| resp.into()).boxed()
     }
+
+    /// Collect the list of storage volumes
+    pub fn list_volumes(&self, pool: &request::StoragePool) -> ::futures::BoxFuture<Vec<request::Volume>, LibvirtError> {
+            let payload = request::StoragePoolListAllVolumesRequest::new(pool, 1, 0);
+            self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LIST_ALL_VOLUMES, payload).map(|resp| resp.into()).boxed()
+    }
 }
 
 /// Operations on libvirt domains

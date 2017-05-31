@@ -802,3 +802,26 @@ impl Into<Vec<String>> for StoragePoolListVolumesResponse {
     }
 }
 
+#[derive(Debug)]
+pub struct Volume(generated::remote_nonnull_storage_vol);
+
+impl From<generated::remote_nonnull_storage_vol> for Volume {
+    fn from(inner: generated::remote_nonnull_storage_vol) -> Self {
+        Volume(inner)
+    }
+}
+
+use generated::remote_storage_pool_list_all_volumes_args;
+req!(StoragePoolListAllVolumesRequest: remote_storage_pool_list_all_volumes_args {
+    pool: &StoragePool => pool.0.clone(),
+    need_results: i32 => need_results,
+    flags: u32 => flags
+});
+resp!(StoragePoolListAllVolumesResponse: generated::remote_storage_pool_list_all_volumes_ret);
+rpc!(StoragePoolListAllVolumesRequest => StoragePoolListAllVolumesResponse);
+
+impl Into<Vec<Volume>> for StoragePoolListAllVolumesResponse {
+    fn into(self) -> Vec<Volume> {
+        self.0.vols.into_iter().map(|vol| vol.into()).collect()
+    }
+}
