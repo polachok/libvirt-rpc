@@ -223,6 +223,12 @@ macro_rules! resp {
         #[derive(Debug)]
         pub struct $name(());
         delegate_unpack_impl!($name);
+
+        impl Into<()> for $name {
+            fn into(self) -> () {
+                ()
+            }
+        }
     };
 
     ($name: ident : $inner: ty) => {
@@ -319,12 +325,6 @@ req!(DomainShutdownRequest: remote_domain_shutdown_args {
 resp!(DomainShutdownResponse);
 rpc!(DomainShutdownRequest => DomainShutdownResponse);
 
-impl Into<()> for DomainShutdownResponse {
-    fn into(self) -> () {
-        ()
-    }
-}
-
 use generated::remote_domain_reboot_args;
 req!(DomainRebootRequest: remote_domain_reboot_args {
     dom: &Domain => dom.0.to_owned(),
@@ -333,12 +333,6 @@ req!(DomainRebootRequest: remote_domain_reboot_args {
 
 resp!(DomainRebootResponse);
 rpc!(DomainRebootRequest => DomainRebootResponse);
-
-impl Into<()> for DomainRebootResponse {
-    fn into(self) -> () {
-        ()
-    }
-}
 
 use generated::remote_domain_reset_args;
 req!(DomainResetRequest: remote_domain_reset_args {
@@ -349,12 +343,6 @@ req!(DomainResetRequest: remote_domain_reset_args {
 resp!(DomainResetResponse);
 rpc!(DomainResetRequest => DomainResetResponse);
 
-impl Into<()> for DomainResetResponse {
-    fn into(self) -> () {
-        ()
-    }
-}
-
 use generated::remote_domain_undefine_flags_args;
 req!(DomainUndefineRequest: remote_domain_undefine_flags_args {
     dom: Domain => dom.0,
@@ -363,12 +351,6 @@ req!(DomainUndefineRequest: remote_domain_undefine_flags_args {
 
 resp!(DomainUndefineResponse);
 rpc!(DomainUndefineRequest => DomainUndefineResponse);
-
-impl Into<()> for DomainUndefineResponse {
-    fn into(self) -> () {
-        ()
-    }
-}
 
 pub mod DomainCreateFlags {
     bitflags! {
