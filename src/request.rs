@@ -115,68 +115,153 @@ macro_rules! delegate_unpack_impl {
     }
 }
 
-/// Auth list request must be the first request
-#[derive(Debug)]
-pub struct AuthListRequest(());
+macro_rules! req {
+    ($name: ident) => {
+        #[derive(Debug)]
+        pub struct $name(());
+        delegate_pack_impl!($name);
 
-impl AuthListRequest {
-    pub fn new() -> Self {
-        AuthListRequest(())
+        impl $name {
+            pub fn new() -> Self {
+                $name(())
+            }
+        }
+    };
+
+    ($name:ident : $inner:ident { $($f:ident : $t:ty => $e: expr),+ }) => {
+        #[derive(Debug)]
+        pub struct $name($inner);
+        delegate_pack_impl!($name);
+
+        impl $name {
+            pub fn new($( $f: $t,)+) -> Self {
+                let inner = $inner {
+                    $(
+                        $f: $e,
+                    )+
+                };
+                $name(inner)
+            }
+        }
+    };
+
+    ($name:ident : $inner:ident { $($f:ident as $arg:ident : $t:ty => $e: expr),+ }) => {
+        #[derive(Debug)]
+        pub struct $name($inner);
+        delegate_pack_impl!($name);
+
+        impl $name {
+            pub fn new($( $arg: $t,)+) -> Self {
+                let inner = $inner {
+                    $(
+                        $f: $e,
+                    )+
+                };
+                $name(inner)
+            }
+        }
+    };
+
+
+
+    ($name:ident : $inner:ident { $($f: ident => $e: expr),+ }) => {
+        #[derive(Debug)]
+        pub struct $name($inner);
+        delegate_pack_impl!($name);
+
+        impl $name {
+            pub fn new() -> Self {
+                let inner = $inner {
+                    $(
+                        $f: $e,
+                    )+
+                };
+                $name(inner)
+            }
+        }
+    };
+
+
+    ($name:ident : $inner:ident { $($f: ident : $t: ty),+ }) => {
+        #[derive(Debug)]
+        pub struct $name($inner);
+        delegate_pack_impl!($name);
+
+        impl $name {
+            pub fn new($( $f: $t,)+) -> Self {
+                let inner = $inner {
+                    $(
+                        $f,
+                    )+
+                };
+                $name(inner)
+            }
+        }
+    };
+
+    // argument renaming
+    ($name:ident : $inner:ident { $($f: ident as $arg: ident : $t: ty),+ }) => {
+        #[derive(Debug)]
+        pub struct $name($inner);
+        delegate_pack_impl!($name);
+
+        impl $name {
+            pub fn new($( $arg: $t,)+) -> Self {
+                let inner = $inner {
+                    $(
+                        $f: $arg,
+                    )+
+                };
+                $name(inner)
+            }
+        }
+    };
+}
+
+macro_rules! resp {
+    ($name: ident) => {
+        #[derive(Debug)]
+        pub struct $name(());
+        delegate_unpack_impl!($name);
+    };
+
+    ($name: ident : $inner: ty) => {
+        #[derive(Debug)]
+        pub struct $name($inner);
+        delegate_unpack_impl!($name);
+    };
+}
+
+macro_rules! rpc {
+    ($req:ident => $resp:ident) => {
+        impl<R: ::std::io::Read> LibvirtRpc<R> for $req {
+            type Response = $resp;
+        }
     }
 }
 
-delegate_pack_impl!(AuthListRequest);
-
-#[derive(Debug)]
-pub struct AuthListResponse(LibvirtResponse<generated::remote_auth_list_ret>);
-delegate_unpack_impl!(AuthListResponse);
-
-impl<R: ::std::io::Read> LibvirtRpc<R> for AuthListRequest {
-    type Response = AuthListResponse;
-}
+/// Auth list request must be the first request
+req!(AuthListRequest);
+resp!(AuthListResponse: generated::remote_auth_list_ret);
+rpc!(AuthListRequest => AuthListResponse);
 
 /// Connect open request
-#[derive(Debug)]
-pub struct ConnectOpenRequest(generated::remote_connect_open_args);
+use generated::remote_connect_open_args;
+req!(ConnectOpenRequest: remote_connect_open_args {
+     name => Some(generated::remote_nonnull_string("qemu:///system".to_string())),
+     flags => 0
+});
+resp!(ConnectOpenResponse);
+rpc!(ConnectOpenRequest => ConnectOpenResponse);
 
-impl ConnectOpenRequest {
-    pub fn new() -> Self {
-        let payload = generated::remote_connect_open_args {
-            name: Some(generated::remote_nonnull_string("qemu:///system".to_string())),
-            flags: 0,
-        };
-
-        ConnectOpenRequest(payload)
-    }
-}
-
-delegate_pack_impl!(ConnectOpenRequest);
-
-#[derive(Debug)]
-pub struct ConnectOpenResponse(LibvirtResponse<()>);
-delegate_unpack_impl!(ConnectOpenResponse);
-
-impl<R: ::std::io::Read> LibvirtRpc<R> for ConnectOpenRequest {
-    type Response = ConnectOpenResponse;
-}
-
-#[derive(Debug)]
-pub struct GetLibVersionRequest(());
-
-impl GetLibVersionRequest {
-    pub fn new() -> Self {
-        GetLibVersionRequest(())
-    }
-}
-
-delegate_pack_impl!(GetLibVersionRequest);
-
-#[derive(Debug)]
-pub struct GetLibVersionResponse(LibvirtResponse<generated::remote_connect_get_lib_version_ret>);
+/// Version request
+req!(GetLibVersionRequest);
+resp!(GetLibVersionResponse: generated::remote_connect_get_lib_version_ret);
+rpc!(GetLibVersionRequest => GetLibVersionResponse);
 
 impl GetLibVersionResponse {
     pub fn version(&self) -> (u32, u32, u32) {
-        let mut version = (self.0).0.lib_ver;
+        let mut version = (self.0).lib_ver;
 
         let major = version / 1000000;
         version %= 1000000;
@@ -188,62 +273,31 @@ impl GetLibVersionResponse {
     }
 }
 
-delegate_unpack_impl!(GetLibVersionResponse);
-
-impl<R: ::std::io::Read> LibvirtRpc<R> for GetLibVersionRequest {
-    type Response = GetLibVersionResponse;
-}
-
-#[derive(Debug)]
-pub struct ListDefinedDomainsRequest(generated::remote_connect_list_defined_domains_args);
-
-impl ListDefinedDomainsRequest {
-    pub fn new() -> Self {
-        let payload = generated::remote_connect_list_defined_domains_args {
-            maxnames: generated::REMOTE_DOMAIN_LIST_MAX as i32,
-        };
-        ListDefinedDomainsRequest(payload)
-    }
-}
-
-delegate_pack_impl!(ListDefinedDomainsRequest);
-
-#[derive(Debug)]
-pub struct ListDefinedDomainsResponse(LibvirtResponse<generated::remote_connect_list_defined_domains_ret>);
+use generated::remote_connect_list_defined_domains_args;
+req!(ListDefinedDomainsRequest: remote_connect_list_defined_domains_args {
+    maxnames => generated::REMOTE_DOMAIN_LIST_MAX as i32
+});
+resp!(ListDefinedDomainsResponse: generated::remote_connect_list_defined_domains_ret);
+rpc!(ListDefinedDomainsRequest => ListDefinedDomainsResponse);
 
 impl ListDefinedDomainsResponse {
     pub fn get_domain_names(&self) -> Vec<String> {
         let mut names = Vec::new();
-        for name in &(self.0).0.names {
+        for name in &(self.0).names {
             names.push(name.0.to_string());
         }
         names
     }
 }
 
-delegate_unpack_impl!(ListDefinedDomainsResponse);
+use generated::remote_domain_define_xml_flags_args;
+req!(DomainDefineXMLRequest: remote_domain_define_xml_flags_args {
+    xml: &str => generated::remote_nonnull_string(xml.to_string()),
+    flags: u32 => flags
+});
 
-impl<R: ::std::io::Read> LibvirtRpc<R> for ListDefinedDomainsRequest {
-    type Response = ListDefinedDomainsResponse;
-}
-
-#[derive(Debug)]
-pub struct DomainDefineXMLRequest(generated::remote_domain_define_xml_flags_args);
-
-impl DomainDefineXMLRequest {
-    pub fn new(xml: &str, flags: u32) -> Self {
-        let payload = generated::remote_domain_define_xml_flags_args {
-            xml: generated::remote_nonnull_string(xml.to_string()),
-            flags: flags,
-        };
-        DomainDefineXMLRequest(payload)
-    }
-}
-
-delegate_pack_impl!(DomainDefineXMLRequest);
-
-#[derive(Debug)]
-pub struct DomainDefineXMLResponse(generated::remote_domain_define_xml_flags_ret);
+resp!(DomainDefineXMLResponse: generated::remote_domain_define_xml_flags_ret);
+rpc!(DomainDefineXMLRequest => DomainDefineXMLResponse);
 
 impl ::std::convert::Into<Domain> for DomainDefineXMLResponse {
     fn into(self) -> Domain {
@@ -257,27 +311,13 @@ impl DomainDefineXMLResponse {
     }
 }
 
-delegate_unpack_impl!(DomainDefineXMLResponse);
+use generated::remote_domain_shutdown_args;
+req!(DomainShutdownRequest: remote_domain_shutdown_args {
+    dom: &Domain => dom.0.to_owned()
+});
 
-impl<R: ::std::io::Read> LibvirtRpc<R> for DomainDefineXMLRequest {
-    type Response = DomainDefineXMLResponse;
-}
-
-#[derive(Debug)]
-pub struct DomainShutdownRequest(generated::remote_domain_shutdown_args);
-delegate_pack_impl!(DomainShutdownRequest);
-
-impl DomainShutdownRequest {
-    pub fn new(domain: &Domain) -> Self {
-        let payload = generated::remote_domain_shutdown_args {
-            dom: domain.0.to_owned(),
-        };
-        DomainShutdownRequest(payload)
-    }
-}
-
-pub struct DomainShutdownResponse(());
-delegate_unpack_impl!(DomainShutdownResponse);
+resp!(DomainShutdownResponse);
+rpc!(DomainShutdownRequest => DomainShutdownResponse);
 
 impl Into<()> for DomainShutdownResponse {
     fn into(self) -> () {
@@ -285,27 +325,14 @@ impl Into<()> for DomainShutdownResponse {
     }
 }
 
-impl<R: ::std::io::Read> LibvirtRpc<R> for DomainShutdownRequest {
-    type Response = DomainShutdownResponse;
-}
+use generated::remote_domain_reboot_args;
+req!(DomainRebootRequest: remote_domain_reboot_args {
+    dom: &Domain => dom.0.to_owned(),
+    flags: u32 => flags
+});
 
-#[derive(Debug)]
-pub struct DomainRebootRequest(generated::remote_domain_reboot_args);
-delegate_pack_impl!(DomainRebootRequest);
-
-impl DomainRebootRequest {
-    pub fn new(domain: &Domain, flags: u32) -> Self {
-        let payload = generated::remote_domain_reboot_args {
-            dom: domain.0.to_owned(),
-            flags: flags,
-        };
-        DomainRebootRequest(payload)
-    }
-}
-
-#[derive(Debug)]
-pub struct DomainRebootResponse(());
-delegate_unpack_impl!(DomainRebootResponse);
+resp!(DomainRebootResponse);
+rpc!(DomainRebootRequest => DomainRebootResponse);
 
 impl Into<()> for DomainRebootResponse {
     fn into(self) -> () {
@@ -313,27 +340,14 @@ impl Into<()> for DomainRebootResponse {
     }
 }
 
-impl<R: ::std::io::Read> LibvirtRpc<R> for DomainRebootRequest {
-    type Response = DomainRebootResponse;
-}
+use generated::remote_domain_reset_args;
+req!(DomainResetRequest: remote_domain_reset_args {
+    dom: &Domain => dom.0.to_owned(),
+    flags: u32 => flags
+});
 
-#[derive(Debug)]
-pub struct DomainResetRequest(generated::remote_domain_reset_args);
-delegate_pack_impl!(DomainResetRequest);
-
-impl DomainResetRequest {
-    pub fn new(domain: &Domain, flags: u32) -> Self {
-        let payload = generated::remote_domain_reset_args {
-            dom: domain.0.to_owned(),
-            flags: flags,
-        };
-        DomainResetRequest(payload)
-    }
-}
-
-#[derive(Debug)]
-pub struct DomainResetResponse(());
-delegate_unpack_impl!(DomainResetResponse);
+resp!(DomainResetResponse);
+rpc!(DomainResetRequest => DomainResetResponse);
 
 impl Into<()> for DomainResetResponse {
     fn into(self) -> () {
@@ -341,38 +355,19 @@ impl Into<()> for DomainResetResponse {
     }
 }
 
-impl<R: ::std::io::Read> LibvirtRpc<R> for DomainResetRequest {
-    type Response = DomainResetResponse;
-}
+use generated::remote_domain_undefine_flags_args;
+req!(DomainUndefineRequest: remote_domain_undefine_flags_args {
+    dom: Domain => dom.0,
+    flags: u32 => flags
+});
 
-#[derive(Debug)]
-pub struct DomainUndefineRequest(generated::remote_domain_undefine_flags_args);
-
-impl DomainUndefineRequest {
-    pub fn new(domain: Domain, flags: u32) -> Self {
-        // XXX: use bitflags for flags
-        let payload = generated::remote_domain_undefine_flags_args {
-            dom: domain.0,
-            flags: flags,
-        };
-        DomainUndefineRequest(payload)
-    }
-}
-
-delegate_pack_impl!(DomainUndefineRequest);
-
-#[derive(Debug)]
-pub struct DomainUndefineResponse(());
-delegate_unpack_impl!(DomainUndefineResponse);
+resp!(DomainUndefineResponse);
+rpc!(DomainUndefineRequest => DomainUndefineResponse);
 
 impl Into<()> for DomainUndefineResponse {
     fn into(self) -> () {
         ()
     }
-}
-
-impl<R: ::std::io::Read> LibvirtRpc<R> for DomainUndefineRequest {
-    type Response = DomainUndefineResponse;
 }
 
 pub mod DomainCreateFlags {
@@ -392,25 +387,14 @@ pub mod DomainCreateFlags {
     }
 }
 
-#[derive(Debug)]
-pub struct DomainCreateRequest(generated::remote_domain_create_with_flags_args);
+use generated::remote_domain_create_with_flags_args;
+req!(DomainCreateRequest: remote_domain_create_with_flags_args {
+    dom: Domain => dom.0,
+    flags: DomainCreateFlags::DomainCreateFlags => flags.bits()
+});
 
-impl DomainCreateRequest {
-    pub fn new(domain: Domain, flags: DomainCreateFlags::DomainCreateFlags) -> Self {
-        let payload = generated::remote_domain_create_with_flags_args {
-            dom: domain.0,
-            flags: flags.bits(),
-        };
-        DomainCreateRequest(payload)
-    }
-}
-
-delegate_pack_impl!(DomainCreateRequest);
-
-#[derive(Debug)]
-pub struct DomainCreateResponse(generated::remote_domain_create_with_flags_ret);
-
-delegate_unpack_impl!(DomainCreateResponse);
+resp!(DomainCreateResponse: generated::remote_domain_create_with_flags_ret);
+rpc!(DomainCreateRequest => DomainCreateResponse);
 
 impl ::std::convert::Into<Domain> for DomainCreateResponse {
     fn into(self) -> Domain {
@@ -424,10 +408,6 @@ impl DomainCreateResponse {
     }
 }
 
-impl<R: ::std::io::Read> LibvirtRpc<R> for DomainCreateRequest {
-    type Response = DomainCreateResponse;
-}
-
 pub mod DomainDestroyFlags {
     bitflags! {
         pub flags DomainDestroyFlags: u32 {
@@ -438,28 +418,14 @@ pub mod DomainDestroyFlags {
         }
     }
 }
+use generated::remote_domain_destroy_flags_args;
+req!(DomainDestroyRequest: remote_domain_destroy_flags_args {
+    dom: Domain => dom.0,
+    flags: DomainDestroyFlags::DomainDestroyFlags => flags.bits()
+});
 
-#[derive(Debug)]
-pub struct DomainDestroyRequest(generated::remote_domain_destroy_flags_args);
-delegate_pack_impl!(DomainDestroyRequest);
-
-impl DomainDestroyRequest {
-    pub fn new(dom: Domain, flags: DomainDestroyFlags::DomainDestroyFlags) -> Self {
-        let payload = generated::remote_domain_destroy_flags_args {
-            dom: dom.0,
-            flags: flags.bits(),
-        };
-        DomainDestroyRequest(payload)
-    }
-}
-
-#[derive(Debug)]
-pub struct DomainDestroyResponse(());
-delegate_unpack_impl!(DomainDestroyResponse);
-
-impl<R: ::std::io::Read> LibvirtRpc<R> for DomainDestroyRequest {
-    type Response = DomainDestroyResponse;
-}
+resp!(DomainDestroyResponse);
+rpc!(DomainDestroyRequest => DomainDestroyResponse);
 
 pub mod ListAllDomainFlags {
     bitflags! {
@@ -516,47 +482,22 @@ impl<R: ::std::io::Read> LibvirtRpc<R> for ListAllDomainsRequest {
     type Response = ListAllDomainsResponse;
 }
 
-#[derive(Debug)]
-pub struct DomainEventRegisterAnyRequest(generated::remote_connect_domain_event_register_any_args);
+use generated::remote_connect_domain_event_register_any_args;
+req!(DomainEventRegisterAnyRequest: remote_connect_domain_event_register_any_args {
+    eventID as event: i32
+});
 
-impl DomainEventRegisterAnyRequest {
-    pub fn new(event: i32) -> Self {
-        let payload = generated::remote_connect_domain_event_register_any_args {
-            eventID: event,
-        };
-        DomainEventRegisterAnyRequest(payload)
-    }
-}
+resp!(DomainEventRegisterAnyResponse);
+rpc!(DomainEventRegisterAnyRequest => DomainEventRegisterAnyResponse);
 
-delegate_pack_impl!(DomainEventRegisterAnyRequest);
+use generated::remote_connect_domain_event_callback_register_any_args;
+req!(DomainEventCallbackRegisterAnyRequest: remote_connect_domain_event_callback_register_any_args {
+    eventID as event: i32 => event,
+    dom as domain: &Domain => Some(Box::new(domain.0.clone()))
+});
 
-#[derive(Debug)]
-pub struct DomainEventRegisterAnyResponse(());
-delegate_unpack_impl!(DomainEventRegisterAnyResponse);
-
-impl<R: ::std::io::Read> LibvirtRpc<R> for DomainEventRegisterAnyRequest {
-    type Response = DomainEventRegisterAnyResponse;
-}
-
-#[derive(Debug)]
-pub struct DomainEventCallbackRegisterAnyRequest(generated::remote_connect_domain_event_callback_register_any_args);
-
-impl DomainEventCallbackRegisterAnyRequest {
-    pub fn new(event: i32, domain: &Domain) -> Self {
-        let payload = generated::remote_connect_domain_event_callback_register_any_args {
-            eventID: event,
-            dom: Some(Box::new(domain.0.clone())),
-        };
-        DomainEventCallbackRegisterAnyRequest(payload)
-    }
-}
-
-delegate_pack_impl!(DomainEventCallbackRegisterAnyRequest);
-
-#[derive(Debug)]
-pub struct DomainEventCallbackRegisterAnyResponse(generated::remote_connect_domain_event_callback_register_any_ret);
-
-delegate_unpack_impl!(DomainEventCallbackRegisterAnyResponse);
+resp!(DomainEventCallbackRegisterAnyResponse: generated::remote_connect_domain_event_callback_register_any_ret);
+rpc!(DomainEventCallbackRegisterAnyRequest => DomainEventCallbackRegisterAnyResponse);
 
 impl DomainEventCallbackRegisterAnyResponse {
     pub fn callback_id(&self) -> i32 {
@@ -564,37 +505,18 @@ impl DomainEventCallbackRegisterAnyResponse {
     }
 }
 
-impl<R: ::std::io::Read> LibvirtRpc<R> for DomainEventCallbackRegisterAnyRequest {
-    type Response = DomainEventCallbackRegisterAnyResponse;
-}
+use generated::remote_domain_lookup_by_uuid_args;
+req!(DomainLookupByUuidRequest: remote_domain_lookup_by_uuid_args {
+    uuid: &::uuid::Uuid => generated::remote_uuid(uuid.as_bytes().clone())
+});
 
-#[derive(Debug)]
-pub struct DomainLookupByUuidRequest(generated::remote_domain_lookup_by_uuid_args);
-
-impl DomainLookupByUuidRequest {
-    pub fn new(uuid: &::uuid::Uuid) -> Self {
-        let payload = generated::remote_domain_lookup_by_uuid_args {
-            uuid: generated::remote_uuid(uuid.as_bytes().clone()),
-        };
-        DomainLookupByUuidRequest(payload)
-    }
-}
-
-delegate_pack_impl!(DomainLookupByUuidRequest);
-
-#[derive(Debug)]
-pub struct DomainLookupByUuidResponse(generated::remote_domain_lookup_by_uuid_ret);
+resp!(DomainLookupByUuidResponse: generated::remote_domain_lookup_by_uuid_ret);
+rpc!(DomainLookupByUuidRequest => DomainLookupByUuidResponse);
 
 impl DomainLookupByUuidResponse {
     pub fn domain(&self) -> Domain {
         Domain ((self.0).dom.clone())
     }
-}
-
-delegate_unpack_impl!(DomainLookupByUuidResponse);
-
-impl<R: ::std::io::Read> LibvirtRpc<R> for DomainLookupByUuidRequest {
-    type Response = DomainLookupByUuidResponse;
 }
 
 /* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventStartedDetailType */
@@ -831,27 +753,16 @@ impl Into<Vec<StoragePool>> for ListAllStoragePoolsResponse {
     }
 }
 
-impl<R: ::std::io::Read> LibvirtRpc<R> for ListAllStoragePoolsRequest {
-    type Response = ListAllStoragePoolsResponse;
-}
+rpc!(ListAllStoragePoolsRequest => ListAllStoragePoolsResponse);
 
-#[derive(Debug)]
-pub struct StoragePoolDefineXmlRequest(generated::remote_storage_pool_define_xml_args);
-delegate_pack_impl!(StoragePoolDefineXmlRequest);
+use generated::remote_storage_pool_define_xml_args;
+req!(StoragePoolDefineXmlRequest: remote_storage_pool_define_xml_args {
+    xml: &str => generated::remote_nonnull_string(xml.to_string()),
+    flags: u32 => flags
+});
 
-impl StoragePoolDefineXmlRequest {
-    pub fn new(xml: &str) -> Self {
-        let payload = generated::remote_storage_pool_define_xml_args {
-            xml: generated::remote_nonnull_string(xml.to_string()),
-            flags: 0,
-        };
-        StoragePoolDefineXmlRequest(payload)
-    }
-}
-
-#[derive(Debug)]
-pub struct StoragePoolDefineXmlResponse(generated::remote_storage_pool_define_xml_ret);
-delegate_unpack_impl!(StoragePoolDefineXmlResponse);
+resp!(StoragePoolDefineXmlResponse: generated::remote_storage_pool_define_xml_ret);
+rpc!(StoragePoolDefineXmlRequest => StoragePoolDefineXmlResponse);
 
 impl Into<StoragePool> for StoragePoolDefineXmlResponse {
     fn into(self) -> StoragePool {
@@ -859,33 +770,16 @@ impl Into<StoragePool> for StoragePoolDefineXmlResponse {
     }
 }
 
-impl<R: ::std::io::Read> LibvirtRpc<R> for StoragePoolDefineXmlRequest {
-    type Response = StoragePoolDefineXmlResponse;
-}
+use generated::remote_storage_pool_lookup_by_uuid_args;
+req!(StoragePoolLookupByUuidRequest: remote_storage_pool_lookup_by_uuid_args {
+    uuid: &::uuid::Uuid => generated::remote_uuid(uuid.as_bytes().clone())
+});
 
-#[derive(Debug)]
-pub struct StoragePoolLookupByUuidRequest(generated::remote_storage_pool_lookup_by_uuid_args);
-delegate_pack_impl!(StoragePoolLookupByUuidRequest);
-
-impl StoragePoolLookupByUuidRequest {
-    pub fn new(uuid: &::uuid::Uuid) -> Self {
-        let payload = generated::remote_storage_pool_lookup_by_uuid_args {
-            uuid: generated::remote_uuid(uuid.as_bytes().clone()),
-        };
-        StoragePoolLookupByUuidRequest(payload)
-    }
-}
-
-#[derive(Debug)]
-pub struct StoragePoolLookupByUuidResponse(generated::remote_storage_pool_lookup_by_uuid_ret);
-delegate_unpack_impl!(StoragePoolLookupByUuidResponse);
+resp!(StoragePoolLookupByUuidResponse: generated::remote_storage_pool_lookup_by_uuid_ret);
+rpc!(StoragePoolLookupByUuidRequest => StoragePoolLookupByUuidResponse);
 
 impl Into<StoragePool> for StoragePoolLookupByUuidResponse {
     fn into(self) -> StoragePool {
         StoragePool(self.0.pool)
     }
-}
-
-impl<R: ::std::io::Read> LibvirtRpc<R> for StoragePoolLookupByUuidRequest {
-    type Response = StoragePoolLookupByUuidResponse;
 }

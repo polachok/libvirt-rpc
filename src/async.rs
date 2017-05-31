@@ -405,7 +405,7 @@ impl<'a> PoolOperations<'a> {
 
     /// Define an inactive persistent storage pool or modify an existing persistent one from the XML description.
     pub fn define(&self, xml: &str) -> ::futures::BoxFuture<request::StoragePool, LibvirtError> {
-        let payload = request::StoragePoolDefineXmlRequest::new(xml);
+        let payload = request::StoragePoolDefineXmlRequest::new(xml, 0);
         self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_DEFINE_XML, payload).map(|resp| resp.into()).boxed()
     }
 
