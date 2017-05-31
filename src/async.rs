@@ -427,6 +427,12 @@ impl<'a> PoolOperations<'a> {
         let payload = request::StoragePoolDestroyRequest::new(pool);
         self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_DESTROY, payload).map(|resp| resp.into()).boxed()
     }
+
+    /// Undefine an inactive storage pool
+    pub fn undefine(&self, pool: request::StoragePool) -> ::futures::BoxFuture<(), LibvirtError> {
+        let payload = request::StoragePoolUndefineRequest::new(pool);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_UNDEFINE, payload).map(|resp| resp.into()).boxed()
+    }
 }
 
 /// Operations on libvirt domains

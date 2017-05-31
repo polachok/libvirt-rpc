@@ -780,3 +780,11 @@ req!(StoragePoolDestroyRequest: remote_storage_pool_destroy_args {
 });
 resp!(StoragePoolDestroyResponse);
 rpc!(StoragePoolDestroyRequest => StoragePoolDestroyResponse);
+
+use generated::remote_storage_pool_undefine_args;
+req!(StoragePoolUndefineRequest: remote_storage_pool_undefine_args {
+    pool: StoragePool => pool.0
+});
+resp!(StoragePoolUndefineResponse);
+rpc!(StoragePoolUndefineRequest => StoragePoolUndefineResponse);
+
