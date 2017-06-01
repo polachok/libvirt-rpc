@@ -365,6 +365,10 @@ impl Client {
     pub fn pool(&self) -> PoolOperations {
         PoolOperations{client: self}
     }
+
+    pub fn volume(&self) -> VolumeOperations {
+        VolumeOperations{client: self}
+    }
 }
 
 /// Operations on libvirt storage volumes
