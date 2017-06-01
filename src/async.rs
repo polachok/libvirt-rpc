@@ -427,6 +427,11 @@ impl<'a> VolumeOperations<'a> {
         let payload = request::StorageVolWipeRequest::new(vol, 0);
         self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_WIPE, payload).map(|resp| resp.into()).boxed()
     }
+
+    pub fn lookup_by_name(&self, pool: &request::StoragePool, name: &str) -> ::futures::BoxFuture<request::Volume, LibvirtError> {
+        let payload = request::StorageVolLookupByNameRequest::new(pool, name);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_LOOKUP_BY_NAME, payload).map(|resp| resp.into()).boxed()
+    }
 }
 
 /// Operations on libvirt storage pools

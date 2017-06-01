@@ -882,3 +882,17 @@ req!(StorageVolWipeRequest: remote_storage_vol_wipe_args {
 });
 resp!(StorageVolWipeResponse);
 rpc!(StorageVolWipeRequest => StorageVolWipeResponse);
+
+use generated::remote_storage_vol_lookup_by_name_args;
+req!(StorageVolLookupByNameRequest: remote_storage_vol_lookup_by_name_args {
+    pool: &StoragePool => pool.0.clone(),
+    name: &str => generated::remote_nonnull_string(name.to_owned())
+});
+resp!(StorageVolLookupByNameResponse: generated::remote_storage_vol_lookup_by_name_ret);
+rpc!(StorageVolLookupByNameRequest => StorageVolLookupByNameResponse);
+
+impl Into<Volume> for StorageVolLookupByNameResponse {
+    fn into(self) -> Volume {
+        Volume(self.0.vol)
+    }
+}
