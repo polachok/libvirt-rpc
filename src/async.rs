@@ -432,6 +432,27 @@ impl<'a> VolumeOperations<'a> {
         let payload = request::StorageVolLookupByNameRequest::new(pool, name);
         self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_LOOKUP_BY_NAME, payload).map(|resp| resp.into()).boxed()
     }
+
+    /// Changes the capacity of the storage volume @vol to @capacity.
+    /// The operation will fail if the new capacity requires allocation that would exceed the remaining free space in the parent pool.
+    /// The contents of the new capacity will appear as all zero bytes. The capacity value will be rounded to the granularity supported by the hypervisor.
+    ///
+    /// Normally, the operation will attempt to affect capacity with a minimum impact on allocation (that is, the default operation favors a sparse resize).
+    /// If @flags contains VIR_STORAGE_VOL_RESIZE_ALLOCATE, then the operation will ensure that allocation is sufficient for the new capacity;
+    /// this may make the operation take noticeably longer.
+
+    /// Normally, the operation treats @capacity as the new size in bytes; but if @flags contains VIR_STORAGE_VOL_RESIZE_DELTA,
+    /// then @capacity represents the size difference to add to the current size. It is up to the storage pool implementation whether unaligned
+    /// requests are rounded up to the next valid boundary, or rejected.
+    ///
+    /// Normally, this operation should only be used to enlarge capacity; but if @flags contains VIR_STORAGE_VOL_RESIZE_SHRINK,
+    /// it is possible to attempt a reduction in capacity even though it might cause data loss.
+    /// If VIR_STORAGE_VOL_RESIZE_DELTA is also present, then @capacity is subtracted from the current size; without it,
+    /// @capacity represents the absolute new size regardless of whether it is larger or smaller than the current size.
+    pub fn resize(&self, vol: &request::Volume, capacity: u64, flags: request::StorageVolResizeFlags::StorageVolResizeFlags) -> ::futures::BoxFuture<(), LibvirtError> {
+        let payload = request::StorageVolResizeRequest::new(vol, capacity, flags);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_RESIZE, payload).map(|resp| resp.into()).boxed()
+    }
 }
 
 /// Operations on libvirt storage pools

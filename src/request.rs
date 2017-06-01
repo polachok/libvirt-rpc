@@ -896,3 +896,25 @@ impl Into<Volume> for StorageVolLookupByNameResponse {
         Volume(self.0.vol)
     }
 }
+
+pub mod StorageVolResizeFlags {
+    bitflags! {
+        pub flags StorageVolResizeFlags: u32 {
+            /// force allocation of new size
+            const RESIZE_ALLOCATE = 1,
+            /// size is relative to current
+            const RESIZE_DELTA = 2,
+            /// allow decrease in capacity
+            const RESIZE_SHRINK = 4,
+        }
+    }
+}
+
+use generated::remote_storage_vol_resize_args;
+req!(StorageVolResizeRequest: remote_storage_vol_resize_args {
+    vol: &Volume => vol.0.clone(),
+    capacity: u64 => capacity,
+    flags: StorageVolResizeFlags::StorageVolResizeFlags => flags.bits()
+});
+resp!(StorageVolResizeResponse);
+rpc!(StorageVolResizeRequest => StorageVolResizeResponse);
