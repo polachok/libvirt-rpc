@@ -17,6 +17,7 @@ struct LibvirtCodec;
 
 #[derive(Debug,Clone)]
 pub struct LibvirtRequest {
+    pub stream_id: Option<u64>,
     pub header: request::virNetMessageHeader,
     pub payload: BytesMut,
 }
@@ -132,6 +133,8 @@ impl<T, C> Sink for FramedTransport<T, C> where
 pub struct LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     inner: FramedTransport<T, LibvirtCodec>,
     events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
+    streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<BytesMut>>>>,
+    request_to_stream: Arc<Mutex<HashMap<u64, u64>>>,
 }
 
 impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
@@ -164,7 +167,14 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
 
     fn process_stream(&self, resp: &LibvirtResponse) -> bool {
         if resp.header.type_ == request::generated::virNetMessageType::VIR_NET_STREAM {
-            println!("STREAM {:?}", resp);
+            debug!("incoming stream: {:?}", resp.header);
+            {
+                let req2stream = self.request_to_stream.lock().unwrap();
+                let req_id = resp.header.serial as u64;
+                if let Some(stream_id) = req2stream.get(&req_id) {
+                    println!("found stream id {} for request id {}: {:?}", stream_id, req_id, resp.header);
+                }
+            }
             return true;
         }
         false
@@ -211,6 +221,11 @@ impl<T> Sink for LibvirtTransport<T> where
     type SinkError = ::std::io::Error;
 
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+        if let Some(stream_id) = item.1.stream_id {
+            println!("SENDING REQ ID = {} {:?} WITH STREAM ID {}", item.0, item.1.header, stream_id);
+            let mut request_to_stream = self.request_to_stream.lock().unwrap();
+            request_to_stream.insert(item.0, stream_id);
+        }
         self.inner.start_send(item)
     }
 
@@ -226,6 +241,14 @@ impl<T> Sink for LibvirtTransport<T> where
 #[derive(Debug, Clone)]
 pub struct LibvirtProto {
     pub events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
+    pub streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<BytesMut>>>>,
+}
+
+impl LibvirtProto {
+    pub fn new(events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
+           streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<BytesMut>>>>) -> Self {
+        LibvirtProto { events, streams }
+    }
 }
 
 impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWrite + 'static {
@@ -244,6 +267,8 @@ impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWri
         Ok(LibvirtTransport{ 
             inner: framed_delimited(framed, LibvirtCodec),
             events: self.events.clone(),
+            streams: self.streams.clone(),
+            request_to_stream: Arc::new(Mutex::new(HashMap::new())), 
         })
     }
 }

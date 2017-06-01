@@ -31,6 +31,7 @@ use std::io::Cursor;
 use std::path::Path;
 use std::collections::HashMap;
 use std::sync::{Arc,Mutex};
+use ::rand;
 use ::xdr_codec::{Pack,Unpack};
 use ::bytes::{BufMut, BytesMut};
 use ::tokio_io::codec;
@@ -41,13 +42,13 @@ use ::tokio_service::Service;
 use ::request;
 use ::LibvirtError;
 use ::futures::{Stream, Sink, Poll, StartSend, Future, future};
-use ::proto::{LibvirtProto, LibvirtRequest, LibvirtResponse, EventStream};
+use ::proto::{LibvirtProto, LibvirtRequest, LibvirtResponse, EventStream, LibvirtStream};
 
 /// Libvirt client
 #[derive(Clone)]
 pub struct Client {
     events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
-    streams: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::bytes::BytesMut>>>>,
+    streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<::bytes::BytesMut>>>>,
     inner: Arc<Mutex<multiplex::ClientService<::tokio_uds::UnixStream, LibvirtProto>>>,
 }
 
@@ -57,7 +58,7 @@ impl Client {
         use ::tokio_uds_proto::UnixClient;
         let events = Arc::new(Mutex::new(HashMap::new()));
         let streams = Arc::new(Mutex::new(HashMap::new()));
-        let proto = LibvirtProto { events: events.clone() };
+        let proto = LibvirtProto::new(events.clone(), streams.clone());
         UnixClient::new(proto)
                 .connect(path, handle)
                 .map(|inner| Client {
@@ -67,7 +68,7 @@ impl Client {
                 })
     }
 
-    fn pack<P: Pack<::bytes::Writer<::bytes::BytesMut>>>(procedure: request::remote_procedure, payload: P) -> Result<LibvirtRequest, ::xdr_codec::Error> {
+    fn pack<P: Pack<::bytes::Writer<::bytes::BytesMut>>>(procedure: request::remote_procedure, payload: P, stream_id: Option<u64>) -> Result<LibvirtRequest, ::xdr_codec::Error> {
         let buf = BytesMut::with_capacity(1024);
         let buf = {
             let mut writer = buf.writer();
@@ -75,6 +76,7 @@ impl Client {
             writer.into_inner()
         };
         let req = LibvirtRequest {
+            stream_id: stream_id,
             header: request::virNetMessageHeader {
                 proc_: procedure as i32,
                 ..Default::default()
@@ -99,8 +101,16 @@ impl Client {
      ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
+    {
+        self.request_stream(procedure, payload, None)
+    }
+
+    fn request_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<u64>) ->
+     ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
+        where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
+        <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
      {
-        let req = Self::pack(procedure, payload);
+        let req = Self::pack(procedure, payload, stream);
         match req {
             Err(e) => {
                 future::err(e.into()).boxed()
@@ -111,6 +121,8 @@ impl Client {
                         .boxed()
         }
     }
+
+
 
     /// Retrieves authentication methods (currently only unauthenticated connections are supported)
     pub fn auth(&self) -> ::futures::BoxFuture<request::AuthListResponse, LibvirtError> {
@@ -355,9 +367,19 @@ impl<'a> DomainOperations<'a> {
         self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_RESET, pl).map(|resp| resp.into()).boxed()
     }
 
-    pub fn screenshot(&self, dom: &request::Domain) -> ::futures::BoxFuture<(), LibvirtError> {
+    pub fn screenshot(&self, dom: &request::Domain) -> ::futures::BoxFuture<(Option<String>, LibvirtStream<BytesMut>), LibvirtError> {
+        use rand::Rand;
         let pl = request::DomainScreenshotRequest::new(dom, 0, 0);
-        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_SCREENSHOT, pl).map(|resp| println!("{:?}", resp)).boxed()
+        let streams = self.client.streams.clone();
+        let stream_id = rand::random();
+
+        self.client.request_stream(request::remote_procedure::REMOTE_PROC_DOMAIN_SCREENSHOT, pl, Some(stream_id)).map(move |resp|{
+            println!("{:?}", resp);
+            let mut streams = streams.lock().unwrap();
+            let (sender, receiver) = ::futures::sync::mpsc::channel(1024);
+            streams.insert(stream_id, sender);
+            (resp.into(), LibvirtStream{ inner: receiver })
+        }).boxed()
     }
 }
 
@@ -404,7 +426,7 @@ fn such_async() {
             })
             */
     }).unwrap();
-    println!("RESULT {:?}", result);
+    //println!("RESULT {:?}", result);
     loop {
         /*
         result.for_each(|ev| {

@@ -940,3 +940,10 @@ req!(DomainScreenshotRequest: remote_domain_screenshot_args {
 });
 resp!(DomainScreenshotResponse: generated::remote_domain_screenshot_ret);
 rpc!(DomainScreenshotRequest => DomainScreenshotResponse);
+
+impl Into<Option<String>> for DomainScreenshotResponse {
+    fn into(self) -> Option<String> {
+        self.0.mime.map(|s| s.0)
+    }
+
+}
