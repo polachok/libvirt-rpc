@@ -16,7 +16,7 @@ extern crate env_logger;
 #[macro_use]
 extern crate bitflags;
 
-use xdr_codec::{Pack,Unpack};
+use xdr_codec::{Unpack};
 
 use byteorder::NetworkEndian;
 

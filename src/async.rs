@@ -164,7 +164,7 @@ struct LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
 }
 
 impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
-    fn process_event(&self, resp: &LibvirtResponse) -> bool {
+    fn process_event(&self, resp: &LibvirtResponse) -> ::std::io::Result<bool> {
         let procedure = unsafe { ::std::mem::transmute(resp.header.proc_ as u16) };
         match procedure {
             request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE => {
@@ -177,17 +177,18 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                 {
                     let mut map = self.events.lock().unwrap();
                     if let Some(sender) = map.get_mut(&msg.callbackID) {
-                        sender.start_send(msg.into());
-                        sender.poll_complete();
+                        use std::io::ErrorKind;
+                        try!(sender.start_send(msg.into()).map_err(|e| ::std::io::Error::new(ErrorKind::InvalidInput, e.to_string())));
+                        try!(sender.poll_complete().map_err(|e| ::std::io::Error::new(ErrorKind::InvalidInput, e.to_string())));
                     }
                 }
-                return true;
+                return Ok(true);
             },
             _ => {
                 debug!("unknown procedure {:?} in {:?}", procedure, resp);
             },
         }
-        false
+        Ok(false)
     }
 }
 
@@ -204,35 +205,10 @@ impl<T> Stream for LibvirtTransport<T> where
                 match async {
                 Async::Ready(Some((id, ref resp))) => {
                     debug!("FRAME READY ID: {} RESP: {:?}", id, resp);
-                    if self.process_event(resp) {
+                    if try!(self.process_event(resp)) {
                             debug!("processed event, get next packet");
                             return self.poll();
                     }
-                    /*
-                    let procedure = unsafe { ::std::mem::transmute(resp.header.proc_ as u16) };
-                    match procedure {
-                        request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE => {
-                            //debug!("LIFECYCLE EVENT (CALLBACK) ID: {} RESP: {:?}", id, resp);
-                            let cbid = {
-                                let mut cursor = Cursor::new(&resp.payload);
-                                let (msg, _) = request::generated::remote_domain_event_callback_lifecycle_msg::unpack(&mut cursor).unwrap();
-                                debug!("LIFECYCLE EVENT (CALLBACK) ID: {} PL: {:?}", id, msg);
-                                msg.callbackID
-                            };
-                            {
-                                let mut map = self.events.lock().unwrap();
-                                if let Some(sender) = map.get_mut(&cbid) {
-                                    sender.start_send(resp.clone());
-                                    sender.poll_complete();
-                                }
-                            }
-                            return self.poll();
-                        },
-                        _ => {
-                            debug!("SOMETHING ID: {} RESP: {:?}", id, resp);
-                        },
-                    }
-                    */
                 },
                 _ => debug!("{:?}", async),
                 }

@@ -1,7 +1,5 @@
 use ::xdr_codec;
-use xdr_codec::{Pack,Unpack};
 use std::convert::From;
-use std::default::Default;
 
 pub mod generated {
     //! This module is generated from protocol files.
@@ -12,7 +10,6 @@ pub mod generated {
     #![allow(non_snake_case)]
     #![allow(unused_assignments)]
     use ::xdr_codec;
-    use xdr_codec::{Pack,Unpack};
 
     include!(concat!(env!("OUT_DIR"), "/virnetprotocol_xdr.rs"));
     include!(concat!(env!("OUT_DIR"), "/remote_protocol_xdr.rs"));
@@ -66,7 +63,7 @@ pub struct LibvirtMessage<P> {
     pub payload: P,
 }
 
-impl<P: xdr_codec::Pack<Out>, Out: xdr_codec::Write> Pack<Out> for LibvirtMessage<P> {
+impl<P: xdr_codec::Pack<Out>, Out: xdr_codec::Write> xdr_codec::Pack<Out> for LibvirtMessage<P> {
     fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
         let mut sz: usize = 0;
         sz += try!(self.header.pack(out));
@@ -77,7 +74,7 @@ impl<P: xdr_codec::Pack<Out>, Out: xdr_codec::Write> Pack<Out> for LibvirtMessag
 
 macro_rules! delegate_pack_impl {
     ($t:ty) => {
-        impl<Out: xdr_codec::Write> Pack<Out> for $t {
+        impl<Out: xdr_codec::Write> xdr_codec::Pack<Out> for $t {
             fn pack(&self, out: &mut Out) -> xdr_codec::Result<usize> {
                 self.0.pack(out)
             }
@@ -85,25 +82,9 @@ macro_rules! delegate_pack_impl {
     }
 }
 
-#[derive(Debug)]
-pub struct LibvirtResponse<P>(P);
-
-impl<P> From<P> for LibvirtResponse<P> {
-    fn from(inner: P) -> Self {
-        LibvirtResponse(inner)
-    }
-}
-
-impl<P: xdr_codec::Unpack<In>, In: xdr_codec::Read> Unpack<In> for LibvirtResponse<P> {
-    fn unpack(mut input: &mut In) -> xdr_codec::Result<(Self, usize)> {
-        let (payload, len) = try!(P::unpack(&mut input));
-        Ok((LibvirtResponse(payload), len))
-    }
-}
-
 macro_rules! delegate_unpack_impl {
     ($t:ty) => {
-        impl<In: xdr_codec::Read> Unpack<In> for $t {
+        impl<In: xdr_codec::Read> xdr_codec::Unpack<In> for $t {
             fn unpack(mut input: &mut In) -> xdr_codec::Result<(Self, usize)> {
                 let (inner, len) = try!(xdr_codec::Unpack::unpack(input));
                 let mut pkt: $t = unsafe { ::std::mem::zeroed() };
@@ -352,6 +333,7 @@ req!(DomainUndefineRequest: remote_domain_undefine_flags_args {
 resp!(DomainUndefineResponse);
 rpc!(DomainUndefineRequest => DomainUndefineResponse);
 
+#[allow(non_snake_case)]
 pub mod DomainCreateFlags {
     bitflags! {
         pub flags DomainCreateFlags: u32 {
@@ -390,6 +372,7 @@ impl DomainCreateResponse {
     }
 }
 
+#[allow(non_snake_case)]
 pub mod DomainDestroyFlags {
     bitflags! {
         pub flags DomainDestroyFlags: u32 {
@@ -409,6 +392,7 @@ req!(DomainDestroyRequest: remote_domain_destroy_flags_args {
 resp!(DomainDestroyResponse);
 rpc!(DomainDestroyRequest => DomainDestroyResponse);
 
+#[allow(non_snake_case)]
 pub mod ListAllDomainFlags {
     bitflags! {
         pub flags ListAllDomainsFlags: u32 {
@@ -499,6 +483,13 @@ impl DomainLookupByUuidResponse {
     pub fn domain(&self) -> Domain {
         Domain ((self.0).dom.clone())
     }
+}
+
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventCrashedDetailType */
+#[derive(Debug)]
+pub enum EventCrashedDetailType {
+    /// Guest was panicked
+    Panicked = 0,
 }
 
 /* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventStartedDetailType */
@@ -600,6 +591,15 @@ pub enum EventShutdownDetailType {
     Finished = 0, 
 }
 
+/* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventPMSuspendedDetailType */
+#[derive(Debug)]
+pub enum EventPmSuspendedDetailType {
+    /// Guest was PM suspended to memory
+    Memory = 0,
+    /// Guest was PM suspended to disk
+    Disk = 1,
+}
+
 #[derive(Debug)]
 pub enum DomainEventInfo {
     Defined(EventDefinedDetailType),
@@ -609,6 +609,8 @@ pub enum DomainEventInfo {
     Stopped(EventStoppedDetailType),
     Shutdown(EventShutdownDetailType),
     Resumed(EventResumedDetailType),
+    Crashed(EventCrashedDetailType),
+    PmSuspended(EventPmSuspendedDetailType),
     Other(i32, i32)
 }
 
@@ -661,6 +663,14 @@ impl From<generated::remote_domain_event_callback_lifecycle_msg> for DomainEvent
                 let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
                 DomainEventInfo::Shutdown(detail)
             }
+            VIR_DOMAIN_EVENT_CRASHED => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::Crashed(detail)
+            }
+            VIR_DOMAIN_EVENT_PMSUSPENDED => {
+                let detail = unsafe { mem::transmute(ev.msg.detail as u8) };
+                DomainEventInfo::PmSuspended(detail)
+            }
             i => {
                 DomainEventInfo::Other(i, ev.msg.detail)
             }
@@ -671,6 +681,7 @@ impl From<generated::remote_domain_event_callback_lifecycle_msg> for DomainEvent
 }
 
 // http://libvirt.org/html/libvirt-libvirt-storage.html#virConnectListAllStoragePoolsFlags
+#[allow(non_snake_case)]
 pub mod ListAllStoragePoolsFlags {
     bitflags! {
         pub flags ListAllStoragePoolsFlags: u32 {
@@ -826,6 +837,7 @@ impl Into<Vec<Volume>> for StoragePoolListAllVolumesResponse {
     }
 }
 
+#[allow(non_snake_case)]
 pub mod StorageVolCreateXmlFlags {
     bitflags! {
         pub flags StorageVolCreateXmlFlags: u32 {
@@ -897,6 +909,7 @@ impl Into<Volume> for StorageVolLookupByNameResponse {
     }
 }
 
+#[allow(non_snake_case)]
 pub mod StorageVolResizeFlags {
     bitflags! {
         pub flags StorageVolResizeFlags: u32 {
