@@ -391,6 +391,28 @@ impl Client {
     }
 }
 
+/// Operations on libvirt storage volumes
+pub struct VolumeOperations<'a> {
+    client: &'a Client,
+}
+
+impl<'a> VolumeOperations<'a> {
+    /// Create a storage volume within a pool based on an XML description. Not all pools support creation of volumes.
+    pub fn create(&self, pool: &request::StoragePool, xml: &str,
+                  flags: request::StorageVolCreateXmlFlags::StorageVolCreateXmlFlags) -> ::futures::BoxFuture<request::Volume, LibvirtError> {
+        let payload = request::StorageVolCreateXmlRequest::new(pool, xml, flags);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_CREATE_XML, payload).map(|resp| resp.into()).boxed()
+    }
+
+    /// Create a storage volume in the parent pool, using the 'clonevol' volume as input.
+    /// Information for the new volume (name, perms) are passed via a typical volume XML description.
+    pub fn create_from(&self, pool: &request::StoragePool, xml: &str, vol: &request::Volume,
+                        flags: request::StorageVolCreateXmlFlags::StorageVolCreateXmlFlags) -> ::futures::BoxFuture<request::Volume, LibvirtError> {
+        let payload = request::StorageVolCreateXmlFromRequest::new(pool, xml, vol, flags);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_CREATE_XML_FROM, payload).map(|resp| resp.into()).boxed()
+    }
+}
+
 /// Operations on libvirt storage pools
 pub struct PoolOperations<'a> {
     client: &'a Client,

@@ -825,3 +825,44 @@ impl Into<Vec<Volume>> for StoragePoolListAllVolumesResponse {
         self.0.vols.into_iter().map(|vol| vol.into()).collect()
     }
 }
+
+pub mod StorageVolCreateXmlFlags {
+    bitflags! {
+        pub flags StorageVolCreateXmlFlags: u32 {
+            const VOL_CREATE_PREALLOC_METADATA = 1,
+            /// perform a btrfs lightweight copy
+            const VOL_CREATE_REFLINK = 2,
+        }
+    }
+}
+
+use generated::remote_storage_vol_create_xml_args;
+req!(StorageVolCreateXmlRequest: remote_storage_vol_create_xml_args {
+    pool: &StoragePool => pool.0.clone(),
+    xml: &str => generated::remote_nonnull_string(xml.to_owned()),
+    flags: StorageVolCreateXmlFlags::StorageVolCreateXmlFlags => flags.bits()
+});
+resp!(StorageVolCreateXmlResponse: generated::remote_storage_vol_create_xml_ret);
+rpc!(StorageVolCreateXmlRequest => StorageVolCreateXmlResponse);
+
+impl Into<Volume> for StorageVolCreateXmlResponse {
+    fn into(self) -> Volume {
+        self.0.vol.into()
+    }
+}
+
+use generated::remote_storage_vol_create_xml_from_args;
+req!(StorageVolCreateXmlFromRequest: remote_storage_vol_create_xml_from_args {
+    pool: &StoragePool => pool.0.clone(),
+    xml: &str => generated::remote_nonnull_string(xml.to_owned()),
+    clonevol: &Volume => clonevol.0.clone(),
+    flags: StorageVolCreateXmlFlags::StorageVolCreateXmlFlags => flags.bits()
+});
+resp!(StorageVolCreateXmlFromResponse: generated::remote_storage_vol_create_xml_from_ret);
+rpc!(StorageVolCreateXmlFromRequest => StorageVolCreateXmlFromResponse);
+
+impl Into<Volume> for StorageVolCreateXmlFromResponse {
+    fn into(self) -> Volume {
+        self.0.vol.into()
+    }
+}
