@@ -391,6 +391,70 @@ impl Client {
     }
 }
 
+/// Operations on libvirt storage volumes
+pub struct VolumeOperations<'a> {
+    client: &'a Client,
+}
+
+impl<'a> VolumeOperations<'a> {
+    /// Create a storage volume within a pool based on an XML description. Not all pools support creation of volumes.
+    pub fn create(&self, pool: &request::StoragePool, xml: &str,
+                  flags: request::StorageVolCreateXmlFlags::StorageVolCreateXmlFlags) -> ::futures::BoxFuture<request::Volume, LibvirtError> {
+        let payload = request::StorageVolCreateXmlRequest::new(pool, xml, flags);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_CREATE_XML, payload).map(|resp| resp.into()).boxed()
+    }
+
+    /// Create a storage volume in the parent pool, using the 'clonevol' volume as input.
+    /// Information for the new volume (name, perms) are passed via a typical volume XML description.
+    pub fn create_from(&self, pool: &request::StoragePool, xml: &str, vol: &request::Volume,
+                        flags: request::StorageVolCreateXmlFlags::StorageVolCreateXmlFlags) -> ::futures::BoxFuture<request::Volume, LibvirtError> {
+        let payload = request::StorageVolCreateXmlFromRequest::new(pool, xml, vol, flags);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_CREATE_XML_FROM, payload).map(|resp| resp.into()).boxed()
+    }
+
+    /// Delete the storage volume from the pool
+    pub fn delete(&self, vol: request::Volume) -> ::futures::BoxFuture<(), LibvirtError> {
+        let payload = request::StorageVolDeleteRequest::new(vol, 0);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DELETE, payload).map(|resp| resp.into()).boxed()
+    }
+
+    /// Ensure data previously on a volume is not accessible to future reads.
+    /// The data to be wiped may include the format and possibly size information, so non-raw images might become raw with a different size.
+    /// It is storage backend dependent whether the format and size information is regenerated once the initial volume wipe is completed.
+    /// Depending on the actual volume representation, this call may not overwrite the physical location of the volume.
+    /// For instance, files stored journaled, log structured, copy-on-write, versioned, and network file systems are known to be problematic.
+    pub fn wipe(&self, vol: &request::Volume) -> ::futures::BoxFuture<(), LibvirtError> {
+        let payload = request::StorageVolWipeRequest::new(vol, 0);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_WIPE, payload).map(|resp| resp.into()).boxed()
+    }
+
+    pub fn lookup_by_name(&self, pool: &request::StoragePool, name: &str) -> ::futures::BoxFuture<request::Volume, LibvirtError> {
+        let payload = request::StorageVolLookupByNameRequest::new(pool, name);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_LOOKUP_BY_NAME, payload).map(|resp| resp.into()).boxed()
+    }
+
+    /// Changes the capacity of the storage volume @vol to @capacity.
+    /// The operation will fail if the new capacity requires allocation that would exceed the remaining free space in the parent pool.
+    /// The contents of the new capacity will appear as all zero bytes. The capacity value will be rounded to the granularity supported by the hypervisor.
+    ///
+    /// Normally, the operation will attempt to affect capacity with a minimum impact on allocation (that is, the default operation favors a sparse resize).
+    /// If @flags contains VIR_STORAGE_VOL_RESIZE_ALLOCATE, then the operation will ensure that allocation is sufficient for the new capacity;
+    /// this may make the operation take noticeably longer.
+
+    /// Normally, the operation treats @capacity as the new size in bytes; but if @flags contains VIR_STORAGE_VOL_RESIZE_DELTA,
+    /// then @capacity represents the size difference to add to the current size. It is up to the storage pool implementation whether unaligned
+    /// requests are rounded up to the next valid boundary, or rejected.
+    ///
+    /// Normally, this operation should only be used to enlarge capacity; but if @flags contains VIR_STORAGE_VOL_RESIZE_SHRINK,
+    /// it is possible to attempt a reduction in capacity even though it might cause data loss.
+    /// If VIR_STORAGE_VOL_RESIZE_DELTA is also present, then @capacity is subtracted from the current size; without it,
+    /// @capacity represents the absolute new size regardless of whether it is larger or smaller than the current size.
+    pub fn resize(&self, vol: &request::Volume, capacity: u64, flags: request::StorageVolResizeFlags::StorageVolResizeFlags) -> ::futures::BoxFuture<(), LibvirtError> {
+        let payload = request::StorageVolResizeRequest::new(vol, capacity, flags);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_RESIZE, payload).map(|resp| resp.into()).boxed()
+    }
+}
+
 /// Operations on libvirt storage pools
 pub struct PoolOperations<'a> {
     client: &'a Client,

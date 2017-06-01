@@ -825,3 +825,96 @@ impl Into<Vec<Volume>> for StoragePoolListAllVolumesResponse {
         self.0.vols.into_iter().map(|vol| vol.into()).collect()
     }
 }
+
+pub mod StorageVolCreateXmlFlags {
+    bitflags! {
+        pub flags StorageVolCreateXmlFlags: u32 {
+            const VOL_CREATE_PREALLOC_METADATA = 1,
+            /// perform a btrfs lightweight copy
+            const VOL_CREATE_REFLINK = 2,
+        }
+    }
+}
+
+use generated::remote_storage_vol_create_xml_args;
+req!(StorageVolCreateXmlRequest: remote_storage_vol_create_xml_args {
+    pool: &StoragePool => pool.0.clone(),
+    xml: &str => generated::remote_nonnull_string(xml.to_owned()),
+    flags: StorageVolCreateXmlFlags::StorageVolCreateXmlFlags => flags.bits()
+});
+resp!(StorageVolCreateXmlResponse: generated::remote_storage_vol_create_xml_ret);
+rpc!(StorageVolCreateXmlRequest => StorageVolCreateXmlResponse);
+
+impl Into<Volume> for StorageVolCreateXmlResponse {
+    fn into(self) -> Volume {
+        self.0.vol.into()
+    }
+}
+
+use generated::remote_storage_vol_create_xml_from_args;
+req!(StorageVolCreateXmlFromRequest: remote_storage_vol_create_xml_from_args {
+    pool: &StoragePool => pool.0.clone(),
+    xml: &str => generated::remote_nonnull_string(xml.to_owned()),
+    clonevol: &Volume => clonevol.0.clone(),
+    flags: StorageVolCreateXmlFlags::StorageVolCreateXmlFlags => flags.bits()
+});
+resp!(StorageVolCreateXmlFromResponse: generated::remote_storage_vol_create_xml_from_ret);
+rpc!(StorageVolCreateXmlFromRequest => StorageVolCreateXmlFromResponse);
+
+impl Into<Volume> for StorageVolCreateXmlFromResponse {
+    fn into(self) -> Volume {
+        self.0.vol.into()
+    }
+}
+
+use generated::remote_storage_vol_delete_args;
+req!(StorageVolDeleteRequest: remote_storage_vol_delete_args {
+    vol: Volume => vol.0.clone(),
+    flags: u32 => flags
+});
+resp!(StorageVolDeleteResponse);
+rpc!(StorageVolDeleteRequest => StorageVolDeleteResponse);
+
+use generated::remote_storage_vol_wipe_args;
+req!(StorageVolWipeRequest: remote_storage_vol_wipe_args {
+    vol: &Volume => vol.0.clone(),
+    flags: u32 => flags
+});
+resp!(StorageVolWipeResponse);
+rpc!(StorageVolWipeRequest => StorageVolWipeResponse);
+
+use generated::remote_storage_vol_lookup_by_name_args;
+req!(StorageVolLookupByNameRequest: remote_storage_vol_lookup_by_name_args {
+    pool: &StoragePool => pool.0.clone(),
+    name: &str => generated::remote_nonnull_string(name.to_owned())
+});
+resp!(StorageVolLookupByNameResponse: generated::remote_storage_vol_lookup_by_name_ret);
+rpc!(StorageVolLookupByNameRequest => StorageVolLookupByNameResponse);
+
+impl Into<Volume> for StorageVolLookupByNameResponse {
+    fn into(self) -> Volume {
+        Volume(self.0.vol)
+    }
+}
+
+pub mod StorageVolResizeFlags {
+    bitflags! {
+        pub flags StorageVolResizeFlags: u32 {
+            /// force allocation of new size
+            const RESIZE_ALLOCATE = 1,
+            /// size is relative to current
+            const RESIZE_DELTA = 2,
+            /// allow decrease in capacity
+            const RESIZE_SHRINK = 4,
+        }
+    }
+}
+
+use generated::remote_storage_vol_resize_args;
+req!(StorageVolResizeRequest: remote_storage_vol_resize_args {
+    vol: &Volume => vol.0.clone(),
+    capacity: u64 => capacity,
+    flags: StorageVolResizeFlags::StorageVolResizeFlags => flags.bits()
+});
+resp!(StorageVolResizeResponse);
+rpc!(StorageVolResizeRequest => StorageVolResizeResponse);
