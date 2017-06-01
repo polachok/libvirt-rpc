@@ -866,3 +866,19 @@ impl Into<Volume> for StorageVolCreateXmlFromResponse {
         self.0.vol.into()
     }
 }
+
+use generated::remote_storage_vol_delete_args;
+req!(StorageVolDeleteRequest: remote_storage_vol_delete_args {
+    vol: Volume => vol.0.clone(),
+    flags: u32 => flags
+});
+resp!(StorageVolDeleteResponse);
+rpc!(StorageVolDeleteRequest => StorageVolDeleteResponse);
+
+use generated::remote_storage_vol_wipe_args;
+req!(StorageVolWipeRequest: remote_storage_vol_wipe_args {
+    vol: &Volume => vol.0.clone(),
+    flags: u32 => flags
+});
+resp!(StorageVolWipeResponse);
+rpc!(StorageVolWipeRequest => StorageVolWipeResponse);

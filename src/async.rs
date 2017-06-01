@@ -411,6 +411,22 @@ impl<'a> VolumeOperations<'a> {
         let payload = request::StorageVolCreateXmlFromRequest::new(pool, xml, vol, flags);
         self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_CREATE_XML_FROM, payload).map(|resp| resp.into()).boxed()
     }
+
+    /// Delete the storage volume from the pool
+    pub fn delete(&self, vol: request::Volume) -> ::futures::BoxFuture<(), LibvirtError> {
+        let payload = request::StorageVolDeleteRequest::new(vol, 0);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DELETE, payload).map(|resp| resp.into()).boxed()
+    }
+
+    /// Ensure data previously on a volume is not accessible to future reads.
+    /// The data to be wiped may include the format and possibly size information, so non-raw images might become raw with a different size.
+    /// It is storage backend dependent whether the format and size information is regenerated once the initial volume wipe is completed.
+    /// Depending on the actual volume representation, this call may not overwrite the physical location of the volume.
+    /// For instance, files stored journaled, log structured, copy-on-write, versioned, and network file systems are known to be problematic.
+    pub fn wipe(&self, vol: &request::Volume) -> ::futures::BoxFuture<(), LibvirtError> {
+        let payload = request::StorageVolWipeRequest::new(vol, 0);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_WIPE, payload).map(|resp| resp.into()).boxed()
+    }
 }
 
 /// Operations on libvirt storage pools
