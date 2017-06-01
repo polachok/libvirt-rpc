@@ -22,6 +22,7 @@ use byteorder::NetworkEndian;
 
 pub mod request;
 pub mod async;
+mod proto;
 use request::*;
 
 use std::io::Cursor;

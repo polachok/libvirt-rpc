@@ -931,3 +931,12 @@ req!(StorageVolResizeRequest: remote_storage_vol_resize_args {
 });
 resp!(StorageVolResizeResponse);
 rpc!(StorageVolResizeRequest => StorageVolResizeResponse);
+
+use generated::remote_domain_screenshot_args;
+req!(DomainScreenshotRequest: remote_domain_screenshot_args {
+    dom: &Domain => dom.0.clone(),
+    screen: u32 => screen,
+    flags: u32 => flags
+});
+resp!(DomainScreenshotResponse: generated::remote_domain_screenshot_ret);
+rpc!(DomainScreenshotRequest => DomainScreenshotResponse);
