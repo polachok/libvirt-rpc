@@ -947,3 +947,13 @@ impl Into<Option<String>> for DomainScreenshotResponse {
     }
 
 }
+
+use generated::remote_storage_vol_download_args;
+req!(StorageVolDownloadRequest: remote_storage_vol_download_args {
+    vol: &Volume => vol.0.clone(),
+    offset: u64 => offset,
+    length: u64 => length,
+    flags: u32 => flags
+});
+resp!(StorageVolDownloadResponse);
+rpc!(StorageVolDownloadRequest => StorageVolDownloadResponse);

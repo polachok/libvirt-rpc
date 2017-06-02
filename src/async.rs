@@ -214,6 +214,23 @@ impl<'a> VolumeOperations<'a> {
         let payload = request::StorageVolResizeRequest::new(vol, capacity, flags);
         self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_RESIZE, payload).map(|resp| resp.into()).boxed()
     }
+
+    /// Download the content of the volume as a stream. If @length is zero, then the remaining contents of the volume after @offset will be downloaded.
+    /// This call sets up an asynchronous stream; subsequent use of stream APIs is necessary to transfer the actual data,
+    /// determine how much data is successfully transferred, and detect any errors.
+    /// The results will be unpredictable if another active stream is writing to the storage volume.
+    pub fn download(&self, vol: &request::Volume, offset: u64, length: u64) -> ::futures::BoxFuture<LibvirtStream<BytesMut>, LibvirtError> {
+        let pl = request::StorageVolDownloadRequest::new(vol, offset, length, 0);
+        let streams = self.client.streams.clone();
+        let stream_id = rand::random();
+
+        self.client.request_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DOWNLOAD, pl, Some(stream_id)).map(move |resp|{
+            let mut streams = streams.lock().unwrap();
+            let (sender, receiver) = ::futures::sync::mpsc::channel(1024);
+            streams.insert(stream_id, sender);
+            LibvirtStream{ inner: receiver }
+        }).boxed()
+    }
 }
 
 /// Operations on libvirt storage pools
@@ -399,6 +416,50 @@ impl Service for Client {
 }
 
 #[test]
+fn pools_and_volumes() {
+    use ::tokio_core::reactor::Core;
+    use ::futures::Stream;
+
+    ::env_logger::init();
+    let mut core = Core::new().unwrap();
+    let handle = core.handle(); 
+    let client = Client::connect("/var/run/libvirt/libvirt-sock", &handle).unwrap();
+    let result = core.run({
+        client.auth()
+            .and_then(|_| client.open())
+            .and_then(|_| client.version())
+            .and_then(|_| client.pool().list(request::ListAllStoragePoolsFlags::ListAllStoragePoolsFlags::empty()))
+            .and_then(|vols| client.volume().lookup_by_name(&vols[0], "test-volume"))
+            .and_then(|vol| client.volume().download(&vol, 0, 1024))
+            .and_then(|stream| {
+                println!("Got download stream");
+                handle.spawn({
+                    let buf = BytesMut::with_capacity(1024 * 1024);
+                    stream.fold(buf, move |mut buf, part| {
+                        buf.extend_from_slice(&part);
+                        future::ok(buf)
+                    }).and_then(|buf| {
+                        use std::io::Write;
+                        use std::fs::OpenOptions;
+                        println!("FINAL RESULT {:?}", buf.len());
+                        let mut f = OpenOptions::new().write(true).create(true).open("test.img").unwrap();
+                        f.write_all(&buf);
+                        Ok(())
+                    })
+                });
+                Ok(())
+            })
+    }).unwrap();
+
+    println!("RESULT: {:?}", result);
+
+    loop {
+        core.turn(None);
+    }
+}
+
+/*
+#[test]
 fn such_async() {
     use ::tokio_core::reactor::Core;
     use ::futures::Stream;
@@ -460,3 +521,4 @@ fn such_async() {
         //println!("CORE TURNED");
     }
 }
+*/
