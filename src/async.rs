@@ -39,13 +39,14 @@ use ::tokio_service::Service;
 use ::request;
 use ::LibvirtError;
 use ::futures::{Future, future};
-use ::proto::{LibvirtProto, LibvirtRequest, LibvirtResponse, EventStream, LibvirtStream};
+use ::proto::{LibvirtProto, LibvirtRequest, LibvirtResponse, EventStream, LibvirtStream, LibvirtSink};
 
 /// Libvirt client
 #[derive(Clone)]
 pub struct Client {
     events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
     streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<::bytes::BytesMut>>>>,
+    sinks: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Receiver<::bytes::BytesMut>>>>,
     inner: Arc<Mutex<multiplex::ClientService<::tokio_uds::UnixStream, LibvirtProto>>>,
 }
 
@@ -55,17 +56,20 @@ impl Client {
         use ::tokio_uds_proto::UnixClient;
         let events = Arc::new(Mutex::new(HashMap::new()));
         let streams = Arc::new(Mutex::new(HashMap::new()));
-        let proto = LibvirtProto::new(events.clone(), streams.clone());
+        let sinks = Arc::new(Mutex::new(HashMap::new()));
+        let proto = LibvirtProto::new(events.clone(), streams.clone(), sinks.clone());
         UnixClient::new(proto)
                 .connect(path, handle)
                 .map(|inner| Client {
                      inner: Arc::new(Mutex::new(inner)),
                      events: events.clone(),
-                     streams: streams.clone()
+                     streams: streams.clone(),
+                     sinks: sinks.clone(),
                 })
     }
 
-    fn pack<P: Pack<::bytes::Writer<::bytes::BytesMut>>>(procedure: request::remote_procedure, payload: P, stream_id: Option<u64>) -> Result<LibvirtRequest, ::xdr_codec::Error> {
+    fn pack<P: Pack<::bytes::Writer<::bytes::BytesMut>>>(procedure: request::remote_procedure,
+                     payload: P, stream_id: Option<u64>, sink_id: Option<u64>) -> Result<LibvirtRequest, ::xdr_codec::Error> {
         let buf = BytesMut::with_capacity(1024);
         let buf = {
             let mut writer = buf.writer();
@@ -74,6 +78,7 @@ impl Client {
         };
         let req = LibvirtRequest {
             stream_id: stream_id,
+            sink_id: sink_id,
             header: request::virNetMessageHeader {
                 proc_: procedure as i32,
                 ..Default::default()
@@ -107,7 +112,7 @@ impl Client {
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
      {
-        let req = Self::pack(procedure, payload, stream);
+        let req = Self::pack(procedure, payload, stream, None);
         match req {
             Err(e) => {
                 future::err(e.into()).boxed()
@@ -119,7 +124,22 @@ impl Client {
         }
     }
 
-
+    fn request_sink<P>(&self, procedure: request::remote_procedure, payload: P, sink: Option<u64>) ->
+     ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
+        where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
+        <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
+     {
+        let req = Self::pack(procedure, payload, None, sink);
+        match req {
+            Err(e) => {
+                future::err(e.into()).boxed()
+            },
+            Ok(req) => self.call(req)
+                        .map_err(|e| e.into())
+                        .and_then(Self::handle_response)
+                        .boxed()
+        }
+    }
 
     /// Retrieves authentication methods (currently only unauthenticated connections are supported)
     pub fn auth(&self) -> ::futures::BoxFuture<request::AuthListResponse, LibvirtError> {
@@ -224,11 +244,28 @@ impl<'a> VolumeOperations<'a> {
         let streams = self.client.streams.clone();
         let stream_id = rand::random();
 
-        self.client.request_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DOWNLOAD, pl, Some(stream_id)).map(move |resp|{
-            let mut streams = streams.lock().unwrap();
+        self.client.request_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DOWNLOAD, pl, Some(stream_id)).map(move |resp| {
             let (sender, receiver) = ::futures::sync::mpsc::channel(1024);
-            streams.insert(stream_id, sender);
+            {
+                let mut streams = streams.lock().unwrap();
+                streams.insert(stream_id, sender);
+            }
             LibvirtStream{ inner: receiver }
+        }).boxed()
+    }
+
+    pub fn upload(&self, vol: &request::Volume, offset: u64, length: u64) -> ::futures::BoxFuture<LibvirtSink, LibvirtError> {
+        let pl = request::StorageVolUploadRequest::new(vol, offset, length, 0);
+        let sink_id = rand::random();
+        let sinks = self.client.sinks.clone();
+
+        self.client.request_sink(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(sink_id)).map(move |resp| {
+            let (sender, receiver) = ::futures::sync::mpsc::channel(0);
+            {
+                let mut sinks = sinks.lock().unwrap();
+                sinks.insert(sink_id, receiver);
+            }
+            LibvirtSink { inner: sender }
         }).boxed()
     }
 }
@@ -418,6 +455,51 @@ impl Service for Client {
 #[test]
 fn pools_and_volumes() {
     use ::tokio_core::reactor::Core;
+    use ::futures::{Stream,Sink};
+
+    ::env_logger::init();
+    let mut core = Core::new().unwrap();
+    let handle = core.handle(); 
+    let client = Client::connect("/var/run/libvirt/libvirt-sock", &handle).unwrap();
+    let result = core.run({
+        client.auth()
+            .and_then(|_| client.open())
+            .and_then(|_| client.version())
+            .and_then(|_| client.pool().list(request::ListAllStoragePoolsFlags::ListAllStoragePoolsFlags::empty()))
+            .and_then(|vols| client.volume().lookup_by_name(&vols[0], "test-volume"))
+            .and_then(|vol| client.volume().upload(&vol, 0, 1024))
+            .and_then(|sink| {
+                handle.spawn({
+                    println!("Got upload stream");
+                    use std::io::Read;
+                    use std::fs::File;
+                    let mut file = File::open("/etc/passwd").unwrap();
+                    let mut buf = BytesMut::with_capacity(1024 * 1024);
+                    unsafe { buf.set_len(1024) };
+                    file.read_exact(&mut buf[0..1024]).unwrap();
+                    sink.send(buf).and_then(|_| {
+                        println!("UPLOADED");
+                        Ok(())
+                    }).or_else(|e| {
+                        println!("UPLOAD FAIL {:?}", e);
+                        Ok(())
+                    })
+                });
+                Ok(())
+            }).and_then(|_| client.version())
+    }).unwrap();
+
+    println!("RESULT: {:?}", result);
+
+    loop {
+        core.turn(None);
+    }
+}
+
+/*
+#[test]
+fn pools_and_volumes() {
+    use ::tokio_core::reactor::Core;
     use ::futures::Stream;
 
     ::env_logger::init();
@@ -457,6 +539,7 @@ fn pools_and_volumes() {
         core.turn(None);
     }
 }
+*/
 
 /*
 #[test]

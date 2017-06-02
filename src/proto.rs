@@ -15,6 +15,7 @@ struct LibvirtCodec;
 #[derive(Debug,Clone)]
 pub struct LibvirtRequest {
     pub stream_id: Option<u64>,
+    pub sink_id: Option<u64>,
     pub header: request::virNetMessageHeader,
     pub payload: BytesMut,
 }
@@ -131,7 +132,9 @@ pub struct LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     inner: FramedTransport<T, LibvirtCodec>,
     events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
     streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<BytesMut>>>>,
+    sinks: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Receiver<BytesMut>>>>,
     request_to_stream: Arc<Mutex<HashMap<u64, u64>>>,
+    sink_to_request: Arc<Mutex<HashMap<u64, (u64, i32)>>>,
 }
 
 impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
@@ -160,6 +163,42 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
             },
         }
         Ok(false)
+    }
+
+    fn process_sinks(&mut self) {
+        use futures::Async;
+        let mut sinks = self.sinks.lock().unwrap();
+        debug!("PROCESSING SINKS: count {}", sinks.len());
+        for (id, sink) in (*sinks).iter_mut() {
+            debug!("processing sink {}", id);
+            let (req_id, proc_) = {
+                let sink2req = self.sink_to_request.lock().unwrap();
+                let res = sink2req.get(id);
+                if res.is_none() {
+                    error!("can't find request for sink {}", id);
+                    return;
+                }
+                *res.unwrap()
+            };
+            match sink.poll() {
+                Ok(Async::Ready(Some(buf))) => {
+                    let req = LibvirtRequest {
+                        stream_id: None,
+                        sink_id: None,
+                        header: request::virNetMessageHeader {
+                            type_: ::request::generated::virNetMessageType::VIR_NET_STREAM,
+                            status: request::virNetMessageStatus::VIR_NET_CONTINUE,
+                            proc_: proc_,
+                            ..Default::default()
+                        },
+                        payload: buf,
+                    };
+                    debug!("Sink sending {:?}", req.header);
+                    self.inner.start_send((req_id, req));
+                },
+                _ => {},
+            }
+        }
     }
 
     fn process_stream(&self, resp: LibvirtResponse) {
@@ -200,6 +239,7 @@ impl<T> Stream for LibvirtTransport<T> where
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         use futures::Async;
+        self.process_sinks();
         match self.inner.poll() {
             Ok(async) => {
                 match async {
@@ -240,6 +280,14 @@ impl<T> Sink for LibvirtTransport<T> where
             let mut request_to_stream = self.request_to_stream.lock().unwrap();
             request_to_stream.insert(item.0, stream_id);
         }
+        if let Some(sink_id) = item.1.sink_id {
+            println!("SENDING REQ ID = {} {:?} WITH SINK ID {}", item.0, item.1.header, sink_id);
+            {
+                let mut sink_to_request = self.sink_to_request.lock().unwrap();
+                sink_to_request.insert(sink_id, (item.0, item.1.header.proc_));
+            }
+            self.poll();
+        }
         self.inner.start_send(item)
     }
 
@@ -254,14 +302,18 @@ impl<T> Sink for LibvirtTransport<T> where
 
 #[derive(Debug, Clone)]
 pub struct LibvirtProto {
-    pub events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
-    pub streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<BytesMut>>>>,
+    events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
+    streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<BytesMut>>>>,
+    sinks: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Receiver<BytesMut>>>>,
 }
 
 impl LibvirtProto {
-    pub fn new(events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
-           streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<BytesMut>>>>) -> Self {
-        LibvirtProto { events, streams }
+    pub fn new(
+        events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
+        streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<BytesMut>>>>,
+        sinks: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Receiver<BytesMut>>>>
+    ) -> Self {
+        LibvirtProto { events, streams, sinks }
     }
 }
 
@@ -282,7 +334,9 @@ impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWri
             inner: framed_delimited(framed, LibvirtCodec),
             events: self.events.clone(),
             streams: self.streams.clone(),
-            request_to_stream: Arc::new(Mutex::new(HashMap::new())), 
+            sinks: self.sinks.clone(),
+            request_to_stream: Arc::new(Mutex::new(HashMap::new())),
+            sink_to_request:  Arc::new(Mutex::new(HashMap::new())),
         })
     }
 }
@@ -310,6 +364,27 @@ impl<T> Stream for LibvirtStream<T> {
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         self.inner.poll()
+    }
+}
+
+pub struct LibvirtSink {
+    pub inner: ::futures::sync::mpsc::Sender<BytesMut>,
+}
+
+impl Sink for LibvirtSink {
+    type SinkItem = BytesMut;
+    type SinkError = ::futures::sync::mpsc::SendError<Self::SinkItem>;
+
+    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+        self.inner.start_send(item)
+    }
+
+    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
+        self.inner.poll_complete()
+    }
+
+    fn close(&mut self) -> Poll<(), Self::SinkError> {
+        self.inner.close()
     }
 }
 

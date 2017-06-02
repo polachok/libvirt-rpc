@@ -957,3 +957,13 @@ req!(StorageVolDownloadRequest: remote_storage_vol_download_args {
 });
 resp!(StorageVolDownloadResponse);
 rpc!(StorageVolDownloadRequest => StorageVolDownloadResponse);
+
+use generated::remote_storage_vol_upload_args;
+req!(StorageVolUploadRequest: remote_storage_vol_upload_args {
+    vol: &Volume => vol.0.clone(),
+    offset: u64 => offset,
+    length: u64 => length,
+    flags: u32 => flags
+});
+resp!(StorageVolUploadResponse);
+rpc!(StorageVolUploadRequest => StorageVolUploadResponse);
