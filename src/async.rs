@@ -34,14 +34,11 @@ use std::sync::{Arc,Mutex};
 use ::rand;
 use ::xdr_codec::{Pack,Unpack};
 use ::bytes::{BufMut, BytesMut};
-use ::tokio_io::codec;
-use ::tokio_io::{AsyncRead, AsyncWrite};
-use ::tokio_io::codec::length_delimited;
-use ::tokio_proto::multiplex::{self, RequestId};
+use ::tokio_proto::multiplex::{self};
 use ::tokio_service::Service;
 use ::request;
 use ::LibvirtError;
-use ::futures::{Stream, Sink, Poll, StartSend, Future, future};
+use ::futures::{Future, future};
 use ::proto::{LibvirtProto, LibvirtRequest, LibvirtResponse, EventStream, LibvirtStream};
 
 /// Libvirt client
@@ -367,14 +364,20 @@ impl<'a> DomainOperations<'a> {
         self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_RESET, pl).map(|resp| resp.into()).boxed()
     }
 
-    pub fn screenshot(&self, dom: &request::Domain) -> ::futures::BoxFuture<(Option<String>, LibvirtStream<BytesMut>), LibvirtError> {
-        use rand::Rand;
-        let pl = request::DomainScreenshotRequest::new(dom, 0, 0);
+    /// Take a screenshot of current domain console as a stream. The image format is hypervisor specific.
+    /// Moreover, some hypervisors supports multiple displays per domain. These can be distinguished by @screen argument.
+    ///
+    /// This call sets up a stream; subsequent use of stream API is necessary to transfer actual data, determine how much
+    /// data is successfully transferred, and detect any errors.
+    ///
+    /// The screen ID is the sequential number of screen. In case of multiple graphics cards, heads are enumerated before devices,
+    /// e.g. having two graphics cards, both with four heads, screen ID 5 addresses the second head on the second card.
+    pub fn screenshot(&self, dom: &request::Domain, screen: u32) -> ::futures::BoxFuture<(Option<String>, LibvirtStream<BytesMut>), LibvirtError> {
+        let pl = request::DomainScreenshotRequest::new(dom, screen, 0);
         let streams = self.client.streams.clone();
         let stream_id = rand::random();
 
         self.client.request_stream(request::remote_procedure::REMOTE_PROC_DOMAIN_SCREENSHOT, pl, Some(stream_id)).map(move |resp|{
-            println!("{:?}", resp);
             let mut streams = streams.lock().unwrap();
             let (sender, receiver) = ::futures::sync::mpsc::channel(1024);
             streams.insert(stream_id, sender);
@@ -398,6 +401,7 @@ impl Service for Client {
 #[test]
 fn such_async() {
     use ::tokio_core::reactor::Core;
+    use ::futures::Stream;
 
     ::env_logger::init();
     let mut core = Core::new().unwrap();
@@ -414,8 +418,26 @@ fn such_async() {
             .and_then(|dom| {
                 client.domain().start(dom, request::DomainCreateFlags::DomainCreateFlags::empty())
             }).and_then(|dom| {
-                client.domain().screenshot(&dom)
-            }) /*.and_then(|dom| {
+                client.domain().screenshot(&dom, 0)
+            }).and_then(|(mime, stream)| {
+                println!("Got {:?} stream", mime);
+                handle.spawn({
+                    let buf = BytesMut::with_capacity(1024 * 1024);
+                    stream.fold(buf, move |mut buf, part| {
+                        buf.extend_from_slice(&part);
+                        future::ok(buf)
+                    }).and_then(|buf| {
+                        use std::io::Write;
+                        use std::fs::OpenOptions;
+                        println!("FINAL RESULT {:?}", buf.len());
+                        let mut f = OpenOptions::new().write(true).create(true).open("test.ppm").unwrap();
+                        f.write_all(&buf);
+                        Ok(())
+                    })
+                });
+                Ok(())
+            })
+             /*.and_then(|dom| {
                 client.domain().register_event(&dom, 0)
             }).and_then(|events| {
                 handle.spawn(events.for_each(|ev| {

@@ -1,5 +1,4 @@
 use std::io::Cursor;
-use std::path::Path;
 use std::collections::HashMap;
 use std::sync::{Arc,Mutex};
 use ::xdr_codec::{Pack,Unpack};
@@ -8,10 +7,8 @@ use ::tokio_io::codec;
 use ::tokio_io::{AsyncRead, AsyncWrite};
 use ::tokio_io::codec::length_delimited;
 use ::tokio_proto::multiplex::{self, RequestId};
-use ::tokio_service::Service;
 use ::request;
-use ::LibvirtError;
-use ::futures::{Stream, Sink, Poll, StartSend, Future, future};
+use ::futures::{Stream, Sink, Poll, StartSend};
 
 struct LibvirtCodec;
 
@@ -165,19 +162,33 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
         Ok(false)
     }
 
-    fn process_stream(&self, resp: &LibvirtResponse) -> bool {
-        if resp.header.type_ == request::generated::virNetMessageType::VIR_NET_STREAM {
-            debug!("incoming stream: {:?}", resp.header);
-            {
-                let req2stream = self.request_to_stream.lock().unwrap();
-                let req_id = resp.header.serial as u64;
-                if let Some(stream_id) = req2stream.get(&req_id) {
-                    println!("found stream id {} for request id {}: {:?}", stream_id, req_id, resp.header);
+    fn process_stream(&self, resp: LibvirtResponse) {
+        debug!("incoming stream: {:?}", resp.header);
+        {
+            let req2stream = self.request_to_stream.lock().unwrap();
+            let req_id = resp.header.serial as u64;
+            if let Some(stream_id) = req2stream.get(&req_id) {
+                debug!("found stream id {} for request id {}: {:?}", stream_id, req_id, resp.header);
+                let mut streams = self.streams.lock().unwrap();
+                let mut remove_stream = false;
+                if let Some(sender) = streams.get_mut(&stream_id) {
+                    if resp.payload.len() != 0 {
+                        let _ = sender.start_send(resp.payload);
+                        let _ = sender.poll_complete();
+                    } else {
+                        debug!("closing stream {}", stream_id);
+                        let _ = sender.close();
+                        let _ = sender.poll_complete();
+                        remove_stream = true;
+                    }
                 }
+                if remove_stream {
+                    streams.remove(&stream_id);
+                }
+            } else {
+                error!("can't find stream for request id {}", req_id);
             }
-            return true;
         }
-        false
     }
 }
 
@@ -192,17 +203,20 @@ impl<T> Stream for LibvirtTransport<T> where
         match self.inner.poll() {
             Ok(async) => {
                 match async {
-                Async::Ready(Some((id, ref resp))) => {
+                Async::Ready(Some((id, resp))) => {
                     debug!("FRAME READY ID: {} RESP: {:?}", id, resp);
-                    if try!(self.process_event(resp)) {
+                    if try!(self.process_event(&resp)) {
                             debug!("processed event, get next packet");
                             return self.poll();
                     }
 
-                    if self.process_stream(resp) {
+                    if resp.header.type_ == request::generated::virNetMessageType::VIR_NET_STREAM {
+                        self.process_stream(resp);
                         debug!("processed stream msg, get next packet");
                         return self.poll();
                     }
+
+                    return Ok(Async::Ready(Some((id, resp))));
                 },
                 _ => debug!("{:?}", async),
                 }
