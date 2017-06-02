@@ -452,6 +452,30 @@ impl Service for Client {
     }
 }
 
+fn read_file_to_sink(path: &str, sink: LibvirtSink) -> ::futures::BoxFuture<LibvirtSink,::futures::sync::mpsc::SendError<::bytes::BytesMut>> {
+    use std::io::Read;
+    use std::fs::File;
+    use futures::Sink;
+    let mut file = File::open(path).unwrap();
+    let mut buf = BytesMut::with_capacity(1024);
+    let mut bufs = Vec::new();
+
+    unsafe { buf.set_len(1024) };
+    while let Ok(len) = file.read(&mut buf[0..1024]) {
+        if len == 0 {
+            break;
+        }
+        let rest = buf.split_off(len);
+        bufs.push(Ok(buf));
+        buf = rest;
+        buf.reserve(1024);
+        unsafe { buf.set_len(1024) };
+        println!("read 1024 bytes");
+    }
+    let bufstream = ::futures::stream::iter(bufs.into_iter());
+    sink.send_all(bufstream).map(|(sink, _)| sink).boxed()
+}
+
 #[test]
 fn pools_and_volumes() {
     use ::tokio_core::reactor::Core;
@@ -460,6 +484,7 @@ fn pools_and_volumes() {
     ::env_logger::init();
     let mut core = Core::new().unwrap();
     let handle = core.handle(); 
+    //let cpupool = ::futures_cpupool::new(4);
     let client = Client::connect("/var/run/libvirt/libvirt-sock", &handle).unwrap();
     let result = core.run({
         client.auth()
@@ -471,6 +496,15 @@ fn pools_and_volumes() {
             .and_then(|sink| {
                 handle.spawn({
                     println!("Got upload stream");
+                    read_file_to_sink("/etc/passwd", sink).and_then(|_| {
+                        println!("UPLOADED");
+                        Ok(())
+                    }).or_else(|e| {
+                        println!("UPLOAD FAIL {:?}", e);
+                        Ok(())
+                    })
+
+                    /*
                     use std::io::Read;
                     use std::fs::File;
                     let mut file = File::open("/etc/passwd").unwrap();
@@ -484,6 +518,7 @@ fn pools_and_volumes() {
                         println!("UPLOAD FAIL {:?}", e);
                         Ok(())
                     })
+                    */
                 });
                 Ok(())
             })

@@ -253,7 +253,12 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                     streams.remove(&stream_id);
                 }
             } else {
-                error!("can't find stream for request id {}", req_id);
+                error!("can't find stream for request id {}: {:?}", req_id, resp.header);
+                if resp.header.status == request::generated::virNetMessageStatus::VIR_NET_ERROR {
+                    let mut reader = Cursor::new(resp.payload);
+                    let (err, _) = request::virNetMessageError::unpack(&mut reader).unwrap();
+                    println!("ERROR: {:?}", err);
+                }
             }
         }
     }
