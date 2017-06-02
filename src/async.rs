@@ -258,14 +258,14 @@ impl<'a> VolumeOperations<'a> {
         let pl = request::StorageVolUploadRequest::new(vol, offset, length, 0);
         let sink_id = rand::random();
         let sinks = self.client.sinks.clone();
-
+        let (sender, receiver) = ::futures::sync::mpsc::channel(0);
+        {
+            let mut sinks = sinks.lock().unwrap();
+            sinks.insert(sink_id, receiver);
+        }
+ 
         self.client.request_sink(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(sink_id)).map(move |resp| {
-            let (sender, receiver) = ::futures::sync::mpsc::channel(0);
-            {
-                let mut sinks = sinks.lock().unwrap();
-                sinks.insert(sink_id, receiver);
-            }
-            LibvirtSink { inner: sender }
+           LibvirtSink { inner: sender }
         }).boxed()
     }
 }
@@ -486,7 +486,7 @@ fn pools_and_volumes() {
                     })
                 });
                 Ok(())
-            }).and_then(|_| client.version())
+            })
     }).unwrap();
 
     println!("RESULT: {:?}", result);

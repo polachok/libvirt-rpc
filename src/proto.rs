@@ -167,37 +167,65 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
 
     fn process_sinks(&mut self) {
         use futures::Async;
+        let mut sinks_to_drop = Vec::new();
+
         let mut sinks = self.sinks.lock().unwrap();
         debug!("PROCESSING SINKS: count {}", sinks.len());
-        for (id, sink) in (*sinks).iter_mut() {
+         
+        for (id, sink) in sinks.iter_mut() {
             debug!("processing sink {}", id);
             let (req_id, proc_) = {
                 let sink2req = self.sink_to_request.lock().unwrap();
                 let res = sink2req.get(id);
                 if res.is_none() {
-                    error!("can't find request for sink {}", id);
-                    return;
+                    debug!("can't find request for sink {}", id);
+                    continue;
                 }
                 *res.unwrap()
             };
-            match sink.poll() {
-                Ok(Async::Ready(Some(buf))) => {
-                    let req = LibvirtRequest {
-                        stream_id: None,
-                        sink_id: None,
-                        header: request::virNetMessageHeader {
-                            type_: ::request::generated::virNetMessageType::VIR_NET_STREAM,
-                            status: request::virNetMessageStatus::VIR_NET_CONTINUE,
-                            proc_: proc_,
-                            ..Default::default()
-                        },
-                        payload: buf,
-                    };
-                    debug!("Sink sending {:?}", req.header);
-                    self.inner.start_send((req_id, req));
-                },
-                _ => {},
+            'out: loop {
+                match sink.poll() {
+                    Ok(Async::Ready(Some(buf))) => {
+                        let req = LibvirtRequest {
+                            stream_id: None,
+                            sink_id: None,
+                            header: request::virNetMessageHeader {
+                                type_: ::request::generated::virNetMessageType::VIR_NET_STREAM,
+                                status: request::virNetMessageStatus::VIR_NET_CONTINUE,
+                                proc_: proc_,
+                                ..Default::default()
+                            },
+                            payload: buf,
+                        };
+                        debug!("Sink sending {:?}", req.header);
+                        self.inner.start_send((req_id, req));
+                    },
+                    Ok(Async::Ready(None)) => {
+                        sinks_to_drop.push(*id);
+                        let req = LibvirtRequest {
+                            stream_id: None,
+                            sink_id: None,
+                            header: request::virNetMessageHeader {
+                                type_: ::request::generated::virNetMessageType::VIR_NET_STREAM,
+                                status: request::virNetMessageStatus::VIR_NET_CONTINUE,
+                                proc_: proc_,
+                                ..Default::default()
+                            },
+                            payload: BytesMut::new(),
+                        };
+                        debug!("Empty sink, sending empty msg");
+                        self.inner.start_send((req_id, req));
+                        break 'out;
+                    }
+                    _ => {
+                        break 'out;
+                    },
+                }
             }
+        }
+
+        for id in sinks_to_drop {
+            sinks.remove(&id);
         }
     }
 
@@ -276,17 +304,17 @@ impl<T> Sink for LibvirtTransport<T> where
 
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
         if let Some(stream_id) = item.1.stream_id {
-            println!("SENDING REQ ID = {} {:?} WITH STREAM ID {}", item.0, item.1.header, stream_id);
+            debug!("SENDING REQ ID = {} {:?} WITH STREAM ID {}", item.0, item.1.header, stream_id);
             let mut request_to_stream = self.request_to_stream.lock().unwrap();
             request_to_stream.insert(item.0, stream_id);
         }
         if let Some(sink_id) = item.1.sink_id {
-            println!("SENDING REQ ID = {} {:?} WITH SINK ID {}", item.0, item.1.header, sink_id);
+            debug!("SENDING REQ ID = {} {:?} WITH SINK ID {}", item.0, item.1.header, sink_id);
             {
                 let mut sink_to_request = self.sink_to_request.lock().unwrap();
                 sink_to_request.insert(sink_id, (item.0, item.1.header.proc_));
             }
-            self.poll();
+            self.process_sinks();
         }
         self.inner.start_send(item)
     }
@@ -388,3 +416,9 @@ impl Sink for LibvirtSink {
     }
 }
 
+impl Drop for LibvirtSink {
+    fn drop(&mut self) {
+        self.close();
+        self.poll_complete();
+    }
+}
