@@ -8,10 +8,8 @@ extern crate tokio_core;
 extern crate tokio_uds;
 extern crate tokio_uds_proto;
 extern crate bytes;
-extern crate rand;
 #[macro_use]
 extern crate futures;
-extern crate futures_cpupool;
 #[macro_use]
 extern crate log;
 extern crate env_logger;

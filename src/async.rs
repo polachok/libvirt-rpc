@@ -31,7 +31,6 @@ use std::io::Cursor;
 use std::path::Path;
 use std::collections::HashMap;
 use std::sync::{Arc,Mutex};
-use ::rand;
 use ::xdr_codec::{Pack,Unpack};
 use ::bytes::{BufMut, BytesMut};
 use ::tokio_proto::multiplex::{self};
@@ -238,7 +237,7 @@ impl<'a> VolumeOperations<'a> {
         let pl = request::StorageVolDownloadRequest::new(vol, offset, length, 0);
         let (sender, receiver) = ::futures::sync::mpsc::channel(0);
 
-        self.client.request_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DOWNLOAD, pl, Some(sender)).map(move |resp| {
+        self.client.request_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DOWNLOAD, pl, Some(sender)).map(move |_| {
             LibvirtStream { inner: receiver }
         }).boxed()
     }
@@ -255,7 +254,7 @@ impl<'a> VolumeOperations<'a> {
         let pl = request::StorageVolUploadRequest::new(vol, offset, length, 0);
         let (sender, receiver) = ::futures::sync::mpsc::channel(0);
  
-        self.client.request_sink(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(receiver)).map(move |resp| {
+        self.client.request_sink(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(receiver)).map(move |_| {
            LibvirtSink { inner: sender }
         }).boxed()
     }
@@ -439,34 +438,34 @@ impl Service for Client {
     }
 }
 
-fn read_file_to_sink(path: &str, sink: LibvirtSink) -> ::futures::BoxFuture<LibvirtSink,::futures::sync::mpsc::SendError<::bytes::BytesMut>> {
-    use std::io::Read;
-    use std::fs::File;
-    use futures::Sink;
-    let mut file = File::open(path).unwrap();
-    let mut buf = BytesMut::with_capacity(4096);
-    let mut bufs = Vec::new();
-
-    unsafe { buf.set_len(4096) };
-    while let Ok(len) = file.read(&mut buf[0..4096]) {
-        if len == 0 {
-            break;
-        }
-        let rest = buf.split_off(len);
-        bufs.push(Ok(buf));
-        buf = rest;
-        buf.reserve(4096);
-        unsafe { buf.set_len(4096) };
-        println!("read {} bytes", len);
-    }
-    let bufstream = ::futures::stream::iter(bufs.into_iter());
-    sink.send_all(bufstream).map(|(sink, _)| sink).boxed()
-}
-
 #[test]
 fn pools_and_volumes() {
     use ::tokio_core::reactor::Core;
     use ::futures::{Stream,Sink};
+
+    fn read_file_to_sink(path: &str, sink: LibvirtSink) -> ::futures::BoxFuture<LibvirtSink,::futures::sync::mpsc::SendError<::bytes::BytesMut>> {
+        use std::io::Read;
+        use std::fs::File;
+        use futures::Sink;
+        let mut file = File::open(path).unwrap();
+        let mut buf = BytesMut::with_capacity(4096);
+        let mut bufs = Vec::new();
+
+        unsafe { buf.set_len(4096) };
+        while let Ok(len) = file.read(&mut buf[0..4096]) {
+            if len == 0 {
+                break;
+            }
+            let rest = buf.split_off(len);
+            bufs.push(Ok(buf));
+            buf = rest;
+            buf.reserve(4096);
+            unsafe { buf.set_len(4096) };
+            println!("read {} bytes", len);
+        }
+        let bufstream = ::futures::stream::iter(bufs.into_iter());
+        sink.send_all(bufstream).map(|(sink, _)| sink).boxed()
+    }
 
     ::env_logger::init();
     let mut core = Core::new().unwrap();
