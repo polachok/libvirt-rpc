@@ -132,7 +132,9 @@ impl<T, C> Sink for FramedTransport<T, C> where
 pub struct LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     inner: FramedTransport<T, LibvirtCodec>,
     events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
+    /* req.id -> stream */
     streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<BytesMut>>>>,
+    /* req.id -> (stream, procedure) */
     sinks: Arc<Mutex<HashMap<u64, (::futures::sync::mpsc::Receiver<BytesMut>, i32)>>>,
 }
 
