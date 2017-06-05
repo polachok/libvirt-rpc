@@ -931,3 +931,39 @@ req!(StorageVolResizeRequest: remote_storage_vol_resize_args {
 });
 resp!(StorageVolResizeResponse);
 rpc!(StorageVolResizeRequest => StorageVolResizeResponse);
+
+use generated::remote_domain_screenshot_args;
+req!(DomainScreenshotRequest: remote_domain_screenshot_args {
+    dom: &Domain => dom.0.clone(),
+    screen: u32 => screen,
+    flags: u32 => flags
+});
+resp!(DomainScreenshotResponse: generated::remote_domain_screenshot_ret);
+rpc!(DomainScreenshotRequest => DomainScreenshotResponse);
+
+impl Into<Option<String>> for DomainScreenshotResponse {
+    fn into(self) -> Option<String> {
+        self.0.mime.map(|s| s.0)
+    }
+
+}
+
+use generated::remote_storage_vol_download_args;
+req!(StorageVolDownloadRequest: remote_storage_vol_download_args {
+    vol: &Volume => vol.0.clone(),
+    offset: u64 => offset,
+    length: u64 => length,
+    flags: u32 => flags
+});
+resp!(StorageVolDownloadResponse);
+rpc!(StorageVolDownloadRequest => StorageVolDownloadResponse);
+
+use generated::remote_storage_vol_upload_args;
+req!(StorageVolUploadRequest: remote_storage_vol_upload_args {
+    vol: &Volume => vol.0.clone(),
+    offset: u64 => offset,
+    length: u64 => length,
+    flags: u32 => flags
+});
+resp!(StorageVolUploadResponse);
+rpc!(StorageVolUploadRequest => StorageVolUploadResponse);
