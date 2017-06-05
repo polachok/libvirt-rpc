@@ -470,7 +470,7 @@ fn read_file_to_sink(path: &str, sink: LibvirtSink) -> ::futures::BoxFuture<Libv
         buf = rest;
         buf.reserve(1024);
         unsafe { buf.set_len(1024) };
-        println!("read 1024 bytes");
+        println!("read {} bytes", len);
     }
     let bufstream = ::futures::stream::iter(bufs.into_iter());
     sink.send_all(bufstream).map(|(sink, _)| sink).boxed()
@@ -492,7 +492,14 @@ fn pools_and_volumes() {
             .and_then(|_| client.version())
             .and_then(|_| client.pool().list(request::ListAllStoragePoolsFlags::ListAllStoragePoolsFlags::empty()))
             .and_then(|vols| client.volume().lookup_by_name(&vols[0], "test-volume"))
-            .and_then(|vol| client.volume().upload(&vol, 0, 1024))
+            .and_then(|vol| {
+                use std::fs;
+                use std::os::unix::fs::MetadataExt;
+                let m = fs::metadata("/etc/passwd").unwrap();
+                let len = m.size(); 
+                println!("Uploading file of size {}", len);
+                client.volume().upload(&vol, 0, len)
+            })
             .and_then(|sink| {
                 handle.spawn({
                     println!("Got upload stream");
