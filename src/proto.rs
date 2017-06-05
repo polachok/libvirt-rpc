@@ -207,7 +207,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                             sink_id: None,
                             header: request::virNetMessageHeader {
                                 type_: ::request::generated::virNetMessageType::VIR_NET_STREAM,
-                                status: request::virNetMessageStatus::VIR_NET_CONTINUE,
+                                status: request::virNetMessageStatus::VIR_NET_OK,
                                 proc_: proc_,
                                 ..Default::default()
                             },
