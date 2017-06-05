@@ -9,13 +9,13 @@ use ::tokio_io::codec::length_delimited;
 use ::tokio_proto::multiplex::{self, RequestId};
 use ::request;
 use ::futures::{Stream, Sink, Poll, StartSend};
-use ::futures::sync::mpsc::Receiver;
+use ::futures::sync::mpsc::{Sender,Receiver};
 
 struct LibvirtCodec;
 
 #[derive(Debug)]
 pub struct LibvirtRequest {
-    pub stream_id: Option<u64>,
+    pub stream: Option<Sender<BytesMut>>,
     pub sink: Option<Receiver<BytesMut>>,
     pub header: request::virNetMessageHeader,
     pub payload: BytesMut,
@@ -134,7 +134,6 @@ pub struct LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
     streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<BytesMut>>>>,
     sinks: Arc<Mutex<HashMap<u64, (::futures::sync::mpsc::Receiver<BytesMut>, i32)>>>,
-    request_to_stream: Arc<Mutex<HashMap<u64, u64>>>,
 }
 
 impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
@@ -177,7 +176,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                 match sink.poll() {
                     Ok(Async::Ready(Some(buf))) => {
                         let req = LibvirtRequest {
-                            stream_id: None,
+                            stream: None,
                             sink: None,
                             header: request::virNetMessageHeader {
                                 type_: ::request::generated::virNetMessageType::VIR_NET_STREAM,
@@ -193,7 +192,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                     Ok(Async::Ready(None)) => {
                         sinks_to_drop.push(*req_id);
                         let req = LibvirtRequest {
-                            stream_id: None,
+                            stream: None,
                             sink: None,
                             header: request::virNetMessageHeader {
                                 type_: ::request::generated::virNetMessageType::VIR_NET_STREAM,
@@ -222,25 +221,21 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     fn process_stream(&self, resp: LibvirtResponse) {
         debug!("incoming stream: {:?}", resp.header);
         {
-            let req2stream = self.request_to_stream.lock().unwrap();
             let req_id = resp.header.serial as u64;
-            if let Some(stream_id) = req2stream.get(&req_id) {
-                debug!("found stream id {} for request id {}: {:?}", stream_id, req_id, resp.header);
-                let mut streams = self.streams.lock().unwrap();
-                let mut remove_stream = false;
-                if let Some(sender) = streams.get_mut(&stream_id) {
-                    if resp.payload.len() != 0 {
-                        let _ = sender.start_send(resp.payload);
-                        let _ = sender.poll_complete();
-                    } else {
-                        debug!("closing stream {}", stream_id);
-                        let _ = sender.close();
-                        let _ = sender.poll_complete();
-                        remove_stream = true;
-                    }
-                }
-                if remove_stream {
-                    streams.remove(&stream_id);
+            let mut streams = self.streams.lock().unwrap();
+            let mut remove_stream = false;
+
+            if let Some(ref mut stream) = streams.get_mut(&req_id) {
+                debug!("found stream for request id {}: {:?}", req_id, resp.header);
+                let sender = stream;
+                if resp.payload.len() != 0 {
+                    let _ = sender.start_send(resp.payload);
+                    let _ = sender.poll_complete();
+                } else {
+                    debug!("closing stream {}", req_id);
+                    let _ = sender.close();
+                    let _ = sender.poll_complete();
+                    remove_stream = true;
                 }
             } else {
                 error!("can't find stream for request id {}: {:?}", req_id, resp.header);
@@ -249,6 +244,9 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                     let (err, _) = request::virNetMessageError::unpack(&mut reader).unwrap();
                     println!("ERROR: {:?}", err);
                 }
+            }
+            if remove_stream {
+                streams.remove(&req_id);
             }
         }
     }
@@ -299,10 +297,11 @@ impl<T> Sink for LibvirtTransport<T> where
 
     fn start_send(&mut self, mut item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
         use ::std::mem;
-        if let Some(stream_id) = item.1.stream_id {
-            debug!("SENDING REQ ID = {} {:?} WITH STREAM ID {}", item.0, item.1.header, stream_id);
-            let mut request_to_stream = self.request_to_stream.lock().unwrap();
-            request_to_stream.insert(item.0, stream_id);
+
+        if let Some(stream) = mem::replace(&mut item.1.stream, None) {
+            debug!("SENDING REQ ID = {} {:?} WITH STREAM", item.0, item.1.header);
+            let mut streams = self.streams.lock().unwrap();
+            streams.insert(item.0, stream);
         }
 
         if let Some(sink) = mem::replace(&mut item.1.sink, None) {
@@ -328,15 +327,13 @@ impl<T> Sink for LibvirtTransport<T> where
 #[derive(Debug, Clone)]
 pub struct LibvirtProto {
     events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
-    streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<BytesMut>>>>,
 }
 
 impl LibvirtProto {
     pub fn new(
-        events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
-        streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<BytesMut>>>>,
+        events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>
     ) -> Self {
-        LibvirtProto { events, streams }
+        LibvirtProto { events }
     }
 }
 
@@ -356,9 +353,8 @@ impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWri
         Ok(LibvirtTransport{ 
             inner: framed_delimited(framed, LibvirtCodec),
             events: self.events.clone(),
-            streams: self.streams.clone(),
+            streams: Arc::new(Mutex::new(HashMap::new())),
             sinks: Arc::new(Mutex::new(HashMap::new())),
-            request_to_stream: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 }

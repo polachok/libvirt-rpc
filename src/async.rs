@@ -39,14 +39,13 @@ use ::tokio_service::Service;
 use ::request;
 use ::LibvirtError;
 use ::futures::{Future, future};
-use ::futures::sync::mpsc::Receiver;
+use ::futures::sync::mpsc::{Sender,Receiver};
 use ::proto::{LibvirtProto, LibvirtRequest, LibvirtResponse, EventStream, LibvirtStream, LibvirtSink};
 
 /// Libvirt client
 #[derive(Clone)]
 pub struct Client {
     events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
-    streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<::bytes::BytesMut>>>>,
     inner: Arc<Mutex<multiplex::ClientService<::tokio_uds::UnixStream, LibvirtProto>>>,
 }
 
@@ -55,19 +54,17 @@ impl Client {
     pub fn connect<P: AsRef<Path>>(path: P, handle: &::tokio_core::reactor::Handle) -> Result<Client, ::std::io::Error> {
         use ::tokio_uds_proto::UnixClient;
         let events = Arc::new(Mutex::new(HashMap::new()));
-        let streams = Arc::new(Mutex::new(HashMap::new()));
-        let proto = LibvirtProto::new(events.clone(), streams.clone());
+        let proto = LibvirtProto::new(events.clone());
         UnixClient::new(proto)
                 .connect(path, handle)
                 .map(|inner| Client {
                      inner: Arc::new(Mutex::new(inner)),
                      events: events.clone(),
-                     streams: streams.clone(),
                 })
     }
 
     fn pack<P: Pack<::bytes::Writer<::bytes::BytesMut>>>(procedure: request::remote_procedure,
-                     payload: P, stream_id: Option<u64>, sink: Option<Receiver<BytesMut>>) -> Result<LibvirtRequest, ::xdr_codec::Error> {
+                     payload: P, stream: Option<Sender<BytesMut>>, sink: Option<Receiver<BytesMut>>) -> Result<LibvirtRequest, ::xdr_codec::Error> {
         let buf = BytesMut::with_capacity(1024);
         let buf = {
             let mut writer = buf.writer();
@@ -75,7 +72,7 @@ impl Client {
             writer.into_inner()
         };
         let req = LibvirtRequest {
-            stream_id: stream_id,
+            stream: stream,
             sink: sink,
             header: request::virNetMessageHeader {
                 proc_: procedure as i32,
@@ -105,7 +102,7 @@ impl Client {
         self.request_stream(procedure, payload, None)
     }
 
-    fn request_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<u64>) ->
+    fn request_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<Sender<BytesMut>>) ->
      ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
@@ -239,16 +236,10 @@ impl<'a> VolumeOperations<'a> {
     /// The results will be unpredictable if another active stream is writing to the storage volume.
     pub fn download(&self, vol: &request::Volume, offset: u64, length: u64) -> ::futures::BoxFuture<LibvirtStream<BytesMut>, LibvirtError> {
         let pl = request::StorageVolDownloadRequest::new(vol, offset, length, 0);
-        let streams = self.client.streams.clone();
-        let stream_id = rand::random();
+        let (sender, receiver) = ::futures::sync::mpsc::channel(0);
 
-        self.client.request_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DOWNLOAD, pl, Some(stream_id)).map(move |resp| {
-            let (sender, receiver) = ::futures::sync::mpsc::channel(1024);
-            {
-                let mut streams = streams.lock().unwrap();
-                streams.insert(stream_id, sender);
-            }
-            LibvirtStream{ inner: receiver }
+        self.client.request_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DOWNLOAD, pl, Some(sender)).map(move |resp| {
+            LibvirtStream { inner: receiver }
         }).boxed()
     }
 
@@ -420,13 +411,9 @@ impl<'a> DomainOperations<'a> {
     /// e.g. having two graphics cards, both with four heads, screen ID 5 addresses the second head on the second card.
     pub fn screenshot(&self, dom: &request::Domain, screen: u32) -> ::futures::BoxFuture<(Option<String>, LibvirtStream<BytesMut>), LibvirtError> {
         let pl = request::DomainScreenshotRequest::new(dom, screen, 0);
-        let streams = self.client.streams.clone();
-        let stream_id = rand::random();
+        let (sender, receiver) = ::futures::sync::mpsc::channel(0);
 
-        self.client.request_stream(request::remote_procedure::REMOTE_PROC_DOMAIN_SCREENSHOT, pl, Some(stream_id)).map(move |resp|{
-            let mut streams = streams.lock().unwrap();
-            let (sender, receiver) = ::futures::sync::mpsc::channel(1024);
-            streams.insert(stream_id, sender);
+        self.client.request_stream(request::remote_procedure::REMOTE_PROC_DOMAIN_SCREENSHOT, pl, Some(sender)).map(move |resp|{
             (resp.into(), LibvirtStream{ inner: receiver })
         }).boxed()
     }
@@ -467,7 +454,7 @@ fn read_file_to_sink(path: &str, sink: LibvirtSink) -> ::futures::BoxFuture<Libv
     let bufstream = ::futures::stream::iter(bufs.into_iter());
     sink.send_all(bufstream).map(|(sink, _)| sink).boxed()
 }
-
+/*
 #[test]
 fn pools_and_volumes() {
     use ::tokio_core::reactor::Core;
@@ -529,8 +516,8 @@ fn pools_and_volumes() {
         core.turn(None);
     }
 }
+*/
 
-/*
 #[test]
 fn pools_and_volumes() {
     use ::tokio_core::reactor::Core;
@@ -573,7 +560,6 @@ fn pools_and_volumes() {
         core.turn(None);
     }
 }
-*/
 
 /*
 #[test]
