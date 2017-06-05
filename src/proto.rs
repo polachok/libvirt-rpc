@@ -189,7 +189,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                             payload: buf,
                         };
                         debug!("Sink sending {:?}", req.header);
-                        self.inner.start_send((*req_id, req));
+                        let _ = self.inner.start_send((*req_id, req));
                     },
                     Ok(Async::Ready(None)) => {
                         sinks_to_drop.push(*req_id);
@@ -205,7 +205,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                             payload: BytesMut::new(),
                         };
                         debug!("Empty sink, sending empty msg");
-                        self.inner.start_send((*req_id, req));
+                        let _ = self.inner.start_send((*req_id, req));
                         break 'out;
                     }
                     _ => {
@@ -410,7 +410,7 @@ impl Sink for LibvirtSink {
 
 impl Drop for LibvirtSink {
     fn drop(&mut self) {
-        self.close();
-        self.poll_complete();
+        let _ = self.close();
+        let _ = self.poll_complete();
     }
 }
