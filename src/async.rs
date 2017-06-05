@@ -39,6 +39,7 @@ use ::tokio_service::Service;
 use ::request;
 use ::LibvirtError;
 use ::futures::{Future, future};
+use ::futures::sync::mpsc::Receiver;
 use ::proto::{LibvirtProto, LibvirtRequest, LibvirtResponse, EventStream, LibvirtStream, LibvirtSink};
 
 /// Libvirt client
@@ -46,7 +47,6 @@ use ::proto::{LibvirtProto, LibvirtRequest, LibvirtResponse, EventStream, Libvir
 pub struct Client {
     events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
     streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<::bytes::BytesMut>>>>,
-    sinks: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Receiver<::bytes::BytesMut>>>>,
     inner: Arc<Mutex<multiplex::ClientService<::tokio_uds::UnixStream, LibvirtProto>>>,
 }
 
@@ -56,20 +56,18 @@ impl Client {
         use ::tokio_uds_proto::UnixClient;
         let events = Arc::new(Mutex::new(HashMap::new()));
         let streams = Arc::new(Mutex::new(HashMap::new()));
-        let sinks = Arc::new(Mutex::new(HashMap::new()));
-        let proto = LibvirtProto::new(events.clone(), streams.clone(), sinks.clone());
+        let proto = LibvirtProto::new(events.clone(), streams.clone());
         UnixClient::new(proto)
                 .connect(path, handle)
                 .map(|inner| Client {
                      inner: Arc::new(Mutex::new(inner)),
                      events: events.clone(),
                      streams: streams.clone(),
-                     sinks: sinks.clone(),
                 })
     }
 
     fn pack<P: Pack<::bytes::Writer<::bytes::BytesMut>>>(procedure: request::remote_procedure,
-                     payload: P, stream_id: Option<u64>, sink_id: Option<u64>) -> Result<LibvirtRequest, ::xdr_codec::Error> {
+                     payload: P, stream_id: Option<u64>, sink: Option<Receiver<BytesMut>>) -> Result<LibvirtRequest, ::xdr_codec::Error> {
         let buf = BytesMut::with_capacity(1024);
         let buf = {
             let mut writer = buf.writer();
@@ -78,7 +76,7 @@ impl Client {
         };
         let req = LibvirtRequest {
             stream_id: stream_id,
-            sink_id: sink_id,
+            sink: sink,
             header: request::virNetMessageHeader {
                 proc_: procedure as i32,
                 ..Default::default()
@@ -124,7 +122,7 @@ impl Client {
         }
     }
 
-    fn request_sink<P>(&self, procedure: request::remote_procedure, payload: P, sink: Option<u64>) ->
+    fn request_sink<P>(&self, procedure: request::remote_procedure, payload: P, sink: Option<Receiver<BytesMut>>) ->
      ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
@@ -256,15 +254,9 @@ impl<'a> VolumeOperations<'a> {
 
     pub fn upload(&self, vol: &request::Volume, offset: u64, length: u64) -> ::futures::BoxFuture<LibvirtSink, LibvirtError> {
         let pl = request::StorageVolUploadRequest::new(vol, offset, length, 0);
-        let sink_id = rand::random();
-        let sinks = self.client.sinks.clone();
         let (sender, receiver) = ::futures::sync::mpsc::channel(0);
-        {
-            let mut sinks = sinks.lock().unwrap();
-            sinks.insert(sink_id, receiver);
-        }
  
-        self.client.request_sink(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(sink_id)).map(move |resp| {
+        self.client.request_sink(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(receiver)).map(move |resp| {
            LibvirtSink { inner: sender }
         }).boxed()
     }
