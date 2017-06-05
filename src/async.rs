@@ -243,6 +243,14 @@ impl<'a> VolumeOperations<'a> {
         }).boxed()
     }
 
+    /// Upload new content to the volume from a stream. This call will fail if @offset + @length exceeds the size of the volume.
+    /// Otherwise, if @length is non-zero, an error will be raised if an attempt is made to upload greater than @length bytes of data.
+    ///
+    /// This call sets up an asynchronous stream; subsequent use of stream APIs is necessary to transfer the actual data, determine how much data
+    /// is successfully transferred, and detect any errors. The results will be unpredictable if another active stream is writing to the storage volume.
+    ///
+    /// When the data stream is closed whether the upload is successful or not the target storage pool will be refreshed to reflect pool
+    /// and volume changes as a result of the upload. Depending on the target volume storage backend and the source stream type for a successful upload, the target volume may take on the characteristics from the source stream such as format type, capacity, and allocation.
     pub fn upload(&self, vol: &request::Volume, offset: u64, length: u64) -> ::futures::BoxFuture<LibvirtSink, LibvirtError> {
         let pl = request::StorageVolUploadRequest::new(vol, offset, length, 0);
         let (sender, receiver) = ::futures::sync::mpsc::channel(0);
@@ -436,25 +444,25 @@ fn read_file_to_sink(path: &str, sink: LibvirtSink) -> ::futures::BoxFuture<Libv
     use std::fs::File;
     use futures::Sink;
     let mut file = File::open(path).unwrap();
-    let mut buf = BytesMut::with_capacity(1024);
+    let mut buf = BytesMut::with_capacity(4096);
     let mut bufs = Vec::new();
 
-    unsafe { buf.set_len(1024) };
-    while let Ok(len) = file.read(&mut buf[0..1024]) {
+    unsafe { buf.set_len(4096) };
+    while let Ok(len) = file.read(&mut buf[0..4096]) {
         if len == 0 {
             break;
         }
         let rest = buf.split_off(len);
         bufs.push(Ok(buf));
         buf = rest;
-        buf.reserve(1024);
-        unsafe { buf.set_len(1024) };
+        buf.reserve(4096);
+        unsafe { buf.set_len(4096) };
         println!("read {} bytes", len);
     }
     let bufstream = ::futures::stream::iter(bufs.into_iter());
     sink.send_all(bufstream).map(|(sink, _)| sink).boxed()
 }
-/*
+
 #[test]
 fn pools_and_volumes() {
     use ::tokio_core::reactor::Core;
@@ -516,8 +524,8 @@ fn pools_and_volumes() {
         core.turn(None);
     }
 }
-*/
 
+/*
 #[test]
 fn pools_and_volumes() {
     use ::tokio_core::reactor::Core;
@@ -560,6 +568,7 @@ fn pools_and_volumes() {
         core.turn(None);
     }
 }
+*/
 
 /*
 #[test]
