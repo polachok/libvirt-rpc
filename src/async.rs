@@ -39,7 +39,8 @@ use ::request;
 use ::LibvirtError;
 use ::futures::{Future, future};
 use ::futures::sync::mpsc::{Sender,Receiver};
-use ::proto::{LibvirtProto, LibvirtRequest, LibvirtResponse, EventStream, LibvirtStream, LibvirtSink};
+use ::proto::{LibvirtProto, LibvirtRequest, LibvirtResponse};
+pub use ::proto::{LibvirtSink, LibvirtStream, EventStream};
 
 /// Libvirt client
 #[derive(Clone)]
