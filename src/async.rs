@@ -284,6 +284,12 @@ impl<'a> PoolOperations<'a> {
         self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LOOKUP_BY_UUID, payload).map(|resp| resp.into()).boxed()
     }
 
+    /// Fetch a storage pool based on its name
+    pub fn lookup_by_name(&self, name: &str) -> ::futures::BoxFuture<request::StoragePool, LibvirtError> {
+        let payload = request::StoragePoolLookupByNameRequest::new(name);
+        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LOOKUP_BY_NAME, payload).map(|resp| resp.into()).boxed()
+    }
+
     /// Starts an inactive storage pool
     pub fn start(&self, pool: &request::StoragePool) -> ::futures::BoxFuture<(), LibvirtError> {
         let payload = request::StoragePoolCreateRequest::new(pool, 0);

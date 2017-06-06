@@ -777,6 +777,20 @@ impl Into<StoragePool> for StoragePoolLookupByUuidResponse {
     }
 }
 
+use generated::remote_storage_pool_lookup_by_name_args;
+req!(StoragePoolLookupByNameRequest: remote_storage_pool_lookup_by_name_args {
+    name: &str => generated::remote_nonnull_string(name.to_string())
+});
+
+resp!(StoragePoolLookupByNameResponse: generated::remote_storage_pool_lookup_by_name_ret);
+rpc!(StoragePoolLookupByNameRequest => StoragePoolLookupByNameResponse);
+
+impl Into<StoragePool> for StoragePoolLookupByNameResponse {
+    fn into(self) -> StoragePool {
+        StoragePool(self.0.pool)
+    }
+}
+
 use generated::remote_storage_pool_create_args;
 req!(StoragePoolCreateRequest: remote_storage_pool_create_args {
     pool: &StoragePool => pool.0.clone(),
