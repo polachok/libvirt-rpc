@@ -830,6 +830,20 @@ impl Into<Vec<String>> for StoragePoolListVolumesResponse {
 #[derive(Debug)]
 pub struct Volume(generated::remote_nonnull_storage_vol);
 
+impl Volume {
+    pub fn name(&self) -> &str {
+        &self.0.name.0
+    }
+
+    pub fn key(&self) -> &str {
+        &self.0.key.0
+    }
+
+    pub fn pool_name(&self) -> &str {
+        &self.0.pool.0
+    }
+}
+
 impl From<generated::remote_nonnull_storage_vol> for Volume {
     fn from(inner: generated::remote_nonnull_storage_vol) -> Self {
         Volume(inner)
