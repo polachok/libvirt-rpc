@@ -106,25 +106,24 @@ impl Client {
      ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
-     {
-        let req = Self::pack(procedure, payload, stream, None);
-        match req {
-            Err(e) => {
-                future::err(e.into()).boxed()
-            },
-            Ok(req) => self.call(req)
-                        .map_err(|e| e.into())
-                        .and_then(Self::handle_response)
-                        .boxed()
-        }
+    {
+        self.request_sink_stream(procedure, payload, stream, None)
     }
 
     fn request_sink<P>(&self, procedure: request::remote_procedure, payload: P, sink: Option<Receiver<BytesMut>>) ->
      ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
+    {
+        self.request_sink_stream(procedure, payload, None, sink)
+    }
+
+    fn request_sink_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<Sender<BytesMut>>, sink: Option<Receiver<BytesMut>>) ->
+     ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
+        where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
+        <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
      {
-        let req = Self::pack(procedure, payload, None, sink);
+        let req = Self::pack(procedure, payload, stream, sink);
         match req {
             Err(e) => {
                 future::err(e.into()).boxed()
@@ -253,7 +252,7 @@ impl<'a> VolumeOperations<'a> {
     /// and volume changes as a result of the upload. Depending on the target volume storage backend and the source stream type for a successful upload, the target volume may take on the characteristics from the source stream such as format type, capacity, and allocation.
     pub fn upload(&self, vol: &request::Volume, offset: u64, length: u64) -> ::futures::BoxFuture<LibvirtSink, LibvirtError> {
         let pl = request::StorageVolUploadRequest::new(vol, offset, length, 0);
-        let (sender, receiver) = ::futures::sync::mpsc::channel(0);
+        let (sender, receiver) = ::futures::sync::mpsc::channel(64);
  
         self.client.request_sink(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(receiver)).map(move |_| {
            LibvirtSink { inner: sender }
@@ -449,30 +448,6 @@ impl Service for Client {
 fn pools_and_volumes() {
     use ::tokio_core::reactor::Core;
     use ::futures::{Stream,Sink};
-
-    fn read_file_to_sink(path: &str, sink: LibvirtSink) -> ::futures::BoxFuture<LibvirtSink,::futures::sync::mpsc::SendError<::bytes::BytesMut>> {
-        use std::io::Read;
-        use std::fs::File;
-        use futures::Sink;
-        let mut file = File::open(path).unwrap();
-        let mut buf = BytesMut::with_capacity(4096);
-        let mut bufs = Vec::new();
-
-        unsafe { buf.set_len(4096) };
-        while let Ok(len) = file.read(&mut buf[0..4096]) {
-            if len == 0 {
-                break;
-            }
-            let rest = buf.split_off(len);
-            bufs.push(Ok(buf));
-            buf = rest;
-            buf.reserve(4096);
-            unsafe { buf.set_len(4096) };
-            println!("read {} bytes", len);
-        }
-        let bufstream = ::futures::stream::iter(bufs.into_iter());
-        sink.send_all(bufstream).map(|(sink, _)| sink).boxed()
-    }
 
     ::env_logger::init();
     let mut core = Core::new().unwrap();
