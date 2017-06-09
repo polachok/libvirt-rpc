@@ -15,7 +15,7 @@ struct LibvirtCodec;
 
 #[derive(Debug)]
 pub struct LibvirtRequest {
-    pub stream: Option<Sender<BytesMut>>,
+    pub stream: Option<Sender<LibvirtResponse>>,
     pub sink: Option<Receiver<BytesMut>>,
     pub header: request::virNetMessageHeader,
     pub payload: BytesMut,
@@ -140,7 +140,7 @@ pub struct LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     inner: FramedTransport<T, LibvirtCodec>,
     events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
     /* req.id -> stream */
-    streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<BytesMut>>>>,
+    streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<LibvirtResponse>>>>,
     /* req.id -> (stream, procedure) */
     sinks: Arc<Mutex<HashMap<u64, (::futures::sync::mpsc::Receiver<BytesMut>, i32)>>>,
 }
@@ -263,10 +263,16 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                 debug!("found stream for request id {}: {:?}", req_id, resp.header);
                 let sender = stream;
                 if resp.payload.len() != 0 {
-                    let _ = sender.start_send(resp.payload);
+                    if resp.header.status == request::generated::virNetMessageStatus::VIR_NET_ERROR {
+                        debug!("got error from stream, should drop sink");
+                        let mut sinks = self.sinks.lock().unwrap();
+                        sinks.remove(&req_id);
+                    }
+                    let _ = sender.start_send(resp);
                     let _ = sender.poll_complete();
                 } else {
                     debug!("closing stream {}", req_id);
+                    let _ = sender.start_send(resp);
                     let _ = sender.close();
                     let _ = sender.poll_complete();
                     remove_stream = true;
@@ -444,16 +450,35 @@ impl<T> Stream for EventStream<T> {
     }
 }
 
-pub struct LibvirtStream<T> {
-    pub inner: ::futures::sync::mpsc::Receiver<T>,
+pub struct LibvirtStream {
+    inner: ::futures::sync::mpsc::Receiver<LibvirtResponse>,
 }
 
-impl<T> Stream for LibvirtStream<T> {
-    type Item = T;
-    type Error = ();
+impl From<::futures::sync::mpsc::Receiver<LibvirtResponse>> for LibvirtStream {
+    fn from(f: ::futures::sync::mpsc::Receiver<LibvirtResponse>) -> Self {
+        LibvirtStream{ inner: f }
+    }
+}
+
+impl Stream for LibvirtStream {
+    type Item = BytesMut;
+    type Error = ::LibvirtError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.inner.poll()
+        use futures::Async;
+        match self.inner.poll() {
+            Ok(Async::Ready(Some(resp))) => {
+                if resp.header.status == request::generated::virNetMessageStatus::VIR_NET_ERROR {
+                    let mut reader = Cursor::new(resp.payload);
+                    let (err, _) = request::virNetMessageError::unpack(&mut reader).unwrap();
+                    return Err(::LibvirtError::from(err));
+                }
+                Ok(Async::Ready(Some(resp.payload)))
+            },
+            Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
+            Ok(Async::NotReady) => Ok(Async::NotReady),
+            Err(e) => panic!("LibvirtStream: unexpected error from mpsc::receiver: {:?}", e),
+        }
     }
 }
 

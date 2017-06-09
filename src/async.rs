@@ -64,7 +64,7 @@ impl Client {
     }
 
     fn pack<P: Pack<::bytes::Writer<::bytes::BytesMut>>>(procedure: request::remote_procedure,
-                     payload: P, stream: Option<Sender<BytesMut>>, sink: Option<Receiver<BytesMut>>) -> Result<LibvirtRequest, ::xdr_codec::Error> {
+                     payload: P, stream: Option<Sender<LibvirtResponse>>, sink: Option<Receiver<BytesMut>>) -> Result<LibvirtRequest, ::xdr_codec::Error> {
         let buf = BytesMut::with_capacity(1024);
         let buf = {
             let mut writer = buf.writer();
@@ -102,7 +102,7 @@ impl Client {
         self.request_stream(procedure, payload, None)
     }
 
-    fn request_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<Sender<BytesMut>>) ->
+    fn request_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<Sender<LibvirtResponse>>) ->
      ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
@@ -118,7 +118,7 @@ impl Client {
         self.request_sink_stream(procedure, payload, None, sink)
     }
 
-    fn request_sink_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<Sender<BytesMut>>, sink: Option<Receiver<BytesMut>>) ->
+    fn request_sink_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<Sender<LibvirtResponse>>, sink: Option<Receiver<BytesMut>>) ->
      ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
@@ -233,12 +233,12 @@ impl<'a> VolumeOperations<'a> {
     /// This call sets up an asynchronous stream; subsequent use of stream APIs is necessary to transfer the actual data,
     /// determine how much data is successfully transferred, and detect any errors.
     /// The results will be unpredictable if another active stream is writing to the storage volume.
-    pub fn download(&self, vol: &request::Volume, offset: u64, length: u64) -> ::futures::BoxFuture<LibvirtStream<BytesMut>, LibvirtError> {
+    pub fn download(&self, vol: &request::Volume, offset: u64, length: u64) -> ::futures::BoxFuture<LibvirtStream, LibvirtError> {
         let pl = request::StorageVolDownloadRequest::new(vol, offset, length, 0);
         let (sender, receiver) = ::futures::sync::mpsc::channel(0);
 
         self.client.request_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DOWNLOAD, pl, Some(sender)).map(move |_| {
-            LibvirtStream { inner: receiver }
+            LibvirtStream::from(receiver)
         }).boxed()
     }
 
@@ -257,6 +257,27 @@ impl<'a> VolumeOperations<'a> {
         self.client.request_sink(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(receiver)).map(move |_| {
            LibvirtSink { inner: sender }
         }).boxed()
+    }
+
+    pub fn upload_with<F, R>(&self, vol: &request::Volume, offset: u64, length: u64, uploader: F) -> ::futures::BoxFuture<(), LibvirtError>
+    where F: FnOnce(LibvirtSink) -> R + Send + 'static,
+          R: ::futures::IntoFuture + 'static,
+          R::Future: Send + 'static,
+          R::Item: Send + 'static,
+          R::Error: Send + 'static,
+     {
+        use futures::{Future, Stream};
+        let pl = request::StorageVolUploadRequest::new(vol, offset, length, 0);
+        let (sink_sender, sink_receiver) = ::futures::sync::mpsc::channel(64);
+        let (stream_sender, stream_receiver) = ::futures::sync::mpsc::channel(64);
+ 
+        self.client.request_sink_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(stream_sender), Some(sink_receiver))
+                   .map(move |_| LibvirtSink { inner: sink_sender } )
+                   .map(move |sink| uploader(sink))
+                   .and_then(|_| stream_receiver.into_future().map_err(|e| panic!("Unexpected error in mpsc receiver: {:?}", e)))
+                   .and_then(|(ev, _)| {
+                        Client::handle_response(ev.unwrap())
+                   }).boxed()
     }
 }
 
@@ -422,12 +443,12 @@ impl<'a> DomainOperations<'a> {
     ///
     /// The screen ID is the sequential number of screen. In case of multiple graphics cards, heads are enumerated before devices,
     /// e.g. having two graphics cards, both with four heads, screen ID 5 addresses the second head on the second card.
-    pub fn screenshot(&self, dom: &request::Domain, screen: u32) -> ::futures::BoxFuture<(Option<String>, LibvirtStream<BytesMut>), LibvirtError> {
+    pub fn screenshot(&self, dom: &request::Domain, screen: u32) -> ::futures::BoxFuture<(Option<String>, LibvirtStream), LibvirtError> {
         let pl = request::DomainScreenshotRequest::new(dom, screen, 0);
         let (sender, receiver) = ::futures::sync::mpsc::channel(0);
 
         self.client.request_stream(request::remote_procedure::REMOTE_PROC_DOMAIN_SCREENSHOT, pl, Some(sender)).map(move |resp|{
-            (resp.into(), LibvirtStream{ inner: receiver })
+            (resp.into(), LibvirtStream::from(receiver))
         }).boxed()
     }
 }
