@@ -371,10 +371,8 @@ union remote_typed_param_value switch (int type) {
      hyper l;
  case VIR_TYPED_PARAM_ULLONG:
      unsigned hyper ul;
-#if 0
  case VIR_TYPED_PARAM_DOUBLE:
      double d;
-#endif
  case VIR_TYPED_PARAM_BOOLEAN:
      int b;
  case VIR_TYPED_PARAM_STRING:
