@@ -65,7 +65,7 @@ impl Client {
 
     fn pack<P: Pack<::bytes::Writer<::bytes::BytesMut>>>(procedure: request::remote_procedure,
                      payload: P, stream: Option<Sender<LibvirtResponse>>, sink: Option<Receiver<BytesMut>>) -> Result<LibvirtRequest, ::xdr_codec::Error> {
-        let buf = BytesMut::with_capacity(1024);
+        let buf = BytesMut::with_capacity(4096);
         let buf = {
             let mut writer = buf.writer();
             try!(payload.pack(&mut writer));
@@ -272,10 +272,9 @@ impl<'a> VolumeOperations<'a> {
         let (stream_sender, stream_receiver) = ::futures::sync::mpsc::channel(64);
  
         self.client.request_sink_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(stream_sender), Some(sink_receiver))
-                   .map(move |_| LibvirtSink { inner: sink_sender } )
-                   .map(move |sink| uploader(sink))
+                   .and_then(move |_| uploader(LibvirtSink { inner: sink_sender }).into_future().map_err(|e| panic!(e)))
                    .and_then(|_| stream_receiver.into_future().map_err(|e| panic!("Unexpected error in mpsc receiver: {:?}", e)))
-                   .and_then(|(ev, _)| {
+                   .and_then(|(ev, stream)| {
                         Client::handle_response(ev.unwrap())
                    }).boxed()
     }
