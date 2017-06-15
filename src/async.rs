@@ -64,8 +64,8 @@ impl Client {
     }
 
     fn pack<P: Pack<::bytes::Writer<::bytes::BytesMut>>>(procedure: request::remote_procedure,
-                     payload: P, stream: Option<Sender<BytesMut>>, sink: Option<Receiver<BytesMut>>) -> Result<LibvirtRequest, ::xdr_codec::Error> {
-        let buf = BytesMut::with_capacity(1024);
+                     payload: P, stream: Option<Sender<LibvirtResponse>>, sink: Option<Receiver<BytesMut>>) -> Result<LibvirtRequest, ::xdr_codec::Error> {
+        let buf = BytesMut::with_capacity(4096);
         let buf = {
             let mut writer = buf.writer();
             try!(payload.pack(&mut writer));
@@ -102,29 +102,28 @@ impl Client {
         self.request_stream(procedure, payload, None)
     }
 
-    fn request_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<Sender<BytesMut>>) ->
+    fn request_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<Sender<LibvirtResponse>>) ->
      ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
-     {
-        let req = Self::pack(procedure, payload, stream, None);
-        match req {
-            Err(e) => {
-                future::err(e.into()).boxed()
-            },
-            Ok(req) => self.call(req)
-                        .map_err(|e| e.into())
-                        .and_then(Self::handle_response)
-                        .boxed()
-        }
+    {
+        self.request_sink_stream(procedure, payload, stream, None)
     }
 
     fn request_sink<P>(&self, procedure: request::remote_procedure, payload: P, sink: Option<Receiver<BytesMut>>) ->
      ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
+    {
+        self.request_sink_stream(procedure, payload, None, sink)
+    }
+
+    fn request_sink_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<Sender<LibvirtResponse>>, sink: Option<Receiver<BytesMut>>) ->
+     ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
+        where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
+        <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
      {
-        let req = Self::pack(procedure, payload, None, sink);
+        let req = Self::pack(procedure, payload, stream, sink);
         match req {
             Err(e) => {
                 future::err(e.into()).boxed()
@@ -234,12 +233,12 @@ impl<'a> VolumeOperations<'a> {
     /// This call sets up an asynchronous stream; subsequent use of stream APIs is necessary to transfer the actual data,
     /// determine how much data is successfully transferred, and detect any errors.
     /// The results will be unpredictable if another active stream is writing to the storage volume.
-    pub fn download(&self, vol: &request::Volume, offset: u64, length: u64) -> ::futures::BoxFuture<LibvirtStream<BytesMut>, LibvirtError> {
+    pub fn download(&self, vol: &request::Volume, offset: u64, length: u64) -> ::futures::BoxFuture<LibvirtStream, LibvirtError> {
         let pl = request::StorageVolDownloadRequest::new(vol, offset, length, 0);
         let (sender, receiver) = ::futures::sync::mpsc::channel(0);
 
         self.client.request_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DOWNLOAD, pl, Some(sender)).map(move |_| {
-            LibvirtStream { inner: receiver }
+            LibvirtStream::from(receiver)
         }).boxed()
     }
 
@@ -253,11 +252,32 @@ impl<'a> VolumeOperations<'a> {
     /// and volume changes as a result of the upload. Depending on the target volume storage backend and the source stream type for a successful upload, the target volume may take on the characteristics from the source stream such as format type, capacity, and allocation.
     pub fn upload(&self, vol: &request::Volume, offset: u64, length: u64) -> ::futures::BoxFuture<LibvirtSink, LibvirtError> {
         let pl = request::StorageVolUploadRequest::new(vol, offset, length, 0);
-        let (sender, receiver) = ::futures::sync::mpsc::channel(0);
+        let (sender, receiver) = ::futures::sync::mpsc::channel(64);
  
         self.client.request_sink(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(receiver)).map(move |_| {
            LibvirtSink { inner: sender }
         }).boxed()
+    }
+
+    /// Same as `upload` but accepts callback and returns upload result
+    pub fn upload_with<F, R>(&self, vol: &request::Volume, offset: u64, length: u64, uploader: F) -> ::futures::BoxFuture<(), LibvirtError>
+    where F: FnOnce(LibvirtSink) -> R + Send + 'static,
+          R: ::futures::IntoFuture + 'static,
+          R::Future: Send + 'static,
+          R::Item: Send + 'static,
+          R::Error: Send + 'static,
+     {
+        use futures::{Future, Stream};
+        let pl = request::StorageVolUploadRequest::new(vol, offset, length, 0);
+        let (sink_sender, sink_receiver) = ::futures::sync::mpsc::channel(64);
+        let (stream_sender, stream_receiver) = ::futures::sync::mpsc::channel(64);
+ 
+        self.client.request_sink_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(stream_sender), Some(sink_receiver))
+                   .and_then(move |_| uploader(LibvirtSink { inner: sink_sender }).into_future().map_err(|e| panic!(e)))
+                   .and_then(|_| stream_receiver.into_future().map_err(|e| panic!("Unexpected error in mpsc receiver: {:?}", e)))
+                   .and_then(|(ev, _)| {
+                        Client::handle_response(ev.unwrap())
+                   }).boxed()
     }
 }
 
@@ -423,12 +443,12 @@ impl<'a> DomainOperations<'a> {
     ///
     /// The screen ID is the sequential number of screen. In case of multiple graphics cards, heads are enumerated before devices,
     /// e.g. having two graphics cards, both with four heads, screen ID 5 addresses the second head on the second card.
-    pub fn screenshot(&self, dom: &request::Domain, screen: u32) -> ::futures::BoxFuture<(Option<String>, LibvirtStream<BytesMut>), LibvirtError> {
+    pub fn screenshot(&self, dom: &request::Domain, screen: u32) -> ::futures::BoxFuture<(Option<String>, LibvirtStream), LibvirtError> {
         let pl = request::DomainScreenshotRequest::new(dom, screen, 0);
         let (sender, receiver) = ::futures::sync::mpsc::channel(0);
 
         self.client.request_stream(request::remote_procedure::REMOTE_PROC_DOMAIN_SCREENSHOT, pl, Some(sender)).map(move |resp|{
-            (resp.into(), LibvirtStream{ inner: receiver })
+            (resp.into(), LibvirtStream::from(receiver))
         }).boxed()
     }
 }
@@ -449,30 +469,6 @@ impl Service for Client {
 fn pools_and_volumes() {
     use ::tokio_core::reactor::Core;
     use ::futures::{Stream,Sink};
-
-    fn read_file_to_sink(path: &str, sink: LibvirtSink) -> ::futures::BoxFuture<LibvirtSink,::futures::sync::mpsc::SendError<::bytes::BytesMut>> {
-        use std::io::Read;
-        use std::fs::File;
-        use futures::Sink;
-        let mut file = File::open(path).unwrap();
-        let mut buf = BytesMut::with_capacity(4096);
-        let mut bufs = Vec::new();
-
-        unsafe { buf.set_len(4096) };
-        while let Ok(len) = file.read(&mut buf[0..4096]) {
-            if len == 0 {
-                break;
-            }
-            let rest = buf.split_off(len);
-            bufs.push(Ok(buf));
-            buf = rest;
-            buf.reserve(4096);
-            unsafe { buf.set_len(4096) };
-            println!("read {} bytes", len);
-        }
-        let bufstream = ::futures::stream::iter(bufs.into_iter());
-        sink.send_all(bufstream).map(|(sink, _)| sink).boxed()
-    }
 
     ::env_logger::init();
     let mut core = Core::new().unwrap();
