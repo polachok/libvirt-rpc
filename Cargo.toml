@@ -10,10 +10,12 @@ license = "LGPL-2.1"
 build = "build.rs"
 
 [build-dependencies]
-xdrgen = "0.4"
+#xdrgen = "0.4"
+xdrgen = { git = "https://github.com/polachok/rust-xdr", branch = "short" }
 
 [dependencies]
-xdr-codec = { version = "0.4", features = ["bytecodec"] }
+#xdr-codec = { version = "0.4", features = ["bytecodec"] }
+xdr-codec = { git = "https://github.com/polachok/rust-xdr", branch = "short", features = ["bytecodec"] }
 byteorder = "1.0"
 uuid = "0.5"
 futures = "0.1.6"
