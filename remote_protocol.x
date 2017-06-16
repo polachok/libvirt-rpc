@@ -904,10 +904,6 @@ struct remote_domain_get_info_args {
     remote_nonnull_domain dom;
 };
 
-/* XXX: disable this as short is not supported in xdrgen
- *  (and XDR spec)
- */
-#if 0
 struct remote_domain_get_info_ret { /* insert@1 */
     unsigned char state;
     unsigned hyper maxMem;
@@ -915,8 +911,6 @@ struct remote_domain_get_info_ret { /* insert@1 */
     unsigned short nrVirtCpu;
     unsigned hyper cpuTime;
 };
-#endif
-
 
 struct remote_domain_save_args {
     remote_nonnull_domain dom;

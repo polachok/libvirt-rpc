@@ -13,6 +13,14 @@ pub mod generated {
 
     include!(concat!(env!("OUT_DIR"), "/virnetprotocol_xdr.rs"));
     include!(concat!(env!("OUT_DIR"), "/remote_protocol_xdr.rs"));
+
+    /* This is a hack to work around xdrgen not implementing debug for char fields */
+    impl ::std::fmt::Debug for remote_domain_get_info_ret {
+        fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(), ::std::fmt::Error> {
+            write!(f, "remote_domain_get_info_ret {{ state: {} maxMem: {} memory: {} nrVirtCpu: {} cpuTime: {} }}",
+                     self.state, self.maxMem, self.memory, self.nrVirtCpu, self.cpuTime)
+        }
+    }
 }
 
 pub trait LibvirtRpc<R: ::std::io::Read> where {
@@ -995,3 +1003,52 @@ req!(StorageVolUploadRequest: remote_storage_vol_upload_args {
 });
 resp!(StorageVolUploadResponse);
 rpc!(StorageVolUploadRequest => StorageVolUploadResponse);
+
+use generated::remote_domain_get_info_args;
+req!(DomainGetInfoRequest: remote_domain_get_info_args {
+    dom: &Domain => dom.0.clone()
+});
+resp!(DomainGetInfoResponse: generated::remote_domain_get_info_ret);
+rpc!(DomainGetInfoRequest => DomainGetInfoResponse);
+
+#[derive(Debug)]
+pub struct DomainInfo(DomainGetInfoResponse);
+
+impl DomainInfo {
+    pub fn get_state(&self) -> DomainState {
+        DomainState::from((self.0).0.state as u8)
+    }
+}
+
+impl From<DomainGetInfoResponse> for DomainInfo {
+    fn from(resp: DomainGetInfoResponse) -> Self {
+        DomainInfo(resp)
+    }
+}
+
+#[derive(Debug)]
+#[repr(u8)]
+pub enum DomainState {
+    /// no state
+    NoState = 0,
+    /// the domain is running
+    Running = 1,
+    /// the domain is blocked on resource
+    Blocked = 2,
+    /// the domain is paused by user
+    Paused = 3,
+    /// the domain is being shut down
+    Shutdown = 4,
+    /// the domain is shut off
+    Shutoff = 5,
+    /// the domain is crashed
+    Crashed = 6,
+    /// the domain is suspended by guest power management
+    PmSuspended = 7
+}
+
+impl From<u8> for DomainState {
+    fn from(v: u8) -> Self {
+        unsafe { ::std::mem::transmute(v) }
+    }
+}

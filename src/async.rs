@@ -349,6 +349,10 @@ pub struct DomainOperations<'a> {
 }
 
 impl<'a> DomainOperations<'a> {
+    pub fn info(&self, dom: &request::Domain) -> ::futures::BoxFuture<request::DomainInfo, LibvirtError> {
+        let payload = request::DomainGetInfoRequest::new(dom);
+        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_GET_INFO, payload).map(|resp| resp.into()).boxed()
+    }
     /// Collect a possibly-filtered list of all domains, and return an allocated array of information for each. 
     pub fn list(&self, flags: request::ListAllDomainFlags::ListAllDomainsFlags) -> ::futures::BoxFuture<Vec<request::Domain>, LibvirtError> {
         let payload = request::ListAllDomainsRequest::new(flags);
