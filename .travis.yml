@@ -29,7 +29,8 @@ install:
   - popd
   - sudo libvirtd -d -l -f libvirtd.conf
   - sudo virtlogd -d || true
+  - sudo chown -R $(id -u) /var/run/libvirt/*
 
 script:
   - cargo build --verbose
-  - sudo cargo test --verbose
+  - cargo test --verbose
