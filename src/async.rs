@@ -274,7 +274,7 @@ impl<'a> VolumeOperations<'a> {
  
         self.client.request_sink_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(stream_sender), Some(sink_receiver))
                    .map_err(|e| e.into())
-                   .and_then(move |_| uploader(LibvirtSink { inner: sink_sender }).into_future().map_err(|e| panic!(e)))
+                   .and_then(move |_| uploader(LibvirtSink { inner: sink_sender }).into_future())
                    .and_then(|_| stream_receiver.into_future().map_err(|e| panic!("Unexpected error in mpsc receiver: {:?}", e)))
                    .and_then(|(ev, _)| {
                         Client::handle_response(ev.unwrap()).map_err(|e| e.into())
