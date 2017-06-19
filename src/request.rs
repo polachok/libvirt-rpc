@@ -13,14 +13,6 @@ pub mod generated {
 
     include!(concat!(env!("OUT_DIR"), "/virnetprotocol_xdr.rs"));
     include!(concat!(env!("OUT_DIR"), "/remote_protocol_xdr.rs"));
-
-    /* This is a hack to work around xdrgen not implementing debug for char fields */
-    impl ::std::fmt::Debug for remote_domain_get_info_ret {
-        fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(), ::std::fmt::Error> {
-            write!(f, "remote_domain_get_info_ret {{ state: {} maxMem: {} memory: {} nrVirtCpu: {} cpuTime: {} }}",
-                     self.state, self.maxMem, self.memory, self.nrVirtCpu, self.cpuTime)
-        }
-    }
 }
 
 pub trait LibvirtRpc<R: ::std::io::Read> where {
