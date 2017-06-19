@@ -469,3 +469,39 @@ impl Service for Client {
         inner.call(req).boxed()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fmt::Debug;
+    use ::tokio_core::reactor::Core;
+    use ::async::Client;
+    use futures::{Future,IntoFuture};
+
+    fn connect() -> (Client, Core) {
+        let core = Core::new().unwrap();
+        let handle = core.handle();
+        let client = Client::connect("/var/run/libvirt/libvirt-sock", &handle).unwrap();
+        (client, core)
+    }
+
+    fn run_connected<'a, P, F, I>(f: P)
+     where P: FnOnce(Client) -> F,
+           I: Debug,
+           F: IntoFuture<Item=I, Error=::LibvirtError> + 'static {
+        let (client, mut core) = connect();
+        let result = core.run({
+            client.auth()
+           .and_then(|_| client.open())
+           .and_then(|_| {
+               let c = client.clone();
+               f(c)
+           })
+        }).unwrap();
+        println!("{:?}", result);
+    }
+
+    #[test]
+    fn test_version() {
+        run_connected(|client| client.version())
+    }
+}
