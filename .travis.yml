@@ -32,4 +32,4 @@ install:
 
 script:
   - cargo build --verbose
-  - cargo test --verbose
+  - sudo cargo test --verbose
