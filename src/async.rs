@@ -260,12 +260,12 @@ impl<'a> VolumeOperations<'a> {
     }
 
     /// Same as `upload` but accepts callback and returns upload result
-    pub fn upload_with<F, R>(&self, vol: &request::Volume, offset: u64, length: u64, uploader: F) -> ::futures::BoxFuture<(), LibvirtError>
+    pub fn upload_with<F, R>(&self, vol: &request::Volume, offset: u64, length: u64, uploader: F) -> ::futures::BoxFuture<(), R::Error>
     where F: FnOnce(LibvirtSink) -> R + Send + 'static,
           R: ::futures::IntoFuture + 'static,
           R::Future: Send + 'static,
           R::Item: Send + 'static,
-          R::Error: Send + 'static,
+          R::Error: Send + 'static + From<LibvirtError>,
      {
         use futures::{Future, Stream};
         let pl = request::StorageVolUploadRequest::new(vol, offset, length, 0);
@@ -273,10 +273,11 @@ impl<'a> VolumeOperations<'a> {
         let (stream_sender, stream_receiver) = ::futures::sync::mpsc::channel(64);
  
         self.client.request_sink_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(stream_sender), Some(sink_receiver))
+                   .map_err(|e| e.into())
                    .and_then(move |_| uploader(LibvirtSink { inner: sink_sender }).into_future().map_err(|e| panic!(e)))
                    .and_then(|_| stream_receiver.into_future().map_err(|e| panic!("Unexpected error in mpsc receiver: {:?}", e)))
                    .and_then(|(ev, _)| {
-                        Client::handle_response(ev.unwrap())
+                        Client::handle_response(ev.unwrap()).map_err(|e| e.into())
                    }).boxed()
     }
 }
