@@ -393,7 +393,7 @@ resp!(DomainDestroyResponse);
 rpc!(DomainDestroyRequest => DomainDestroyResponse);
 
 #[allow(non_snake_case)]
-pub mod ListAllDomainFlags {
+pub mod ListAllDomainsFlags {
     bitflags! {
         pub flags ListAllDomainsFlags: u32 {
             const DOMAINS_ACTIVE	=	1,
@@ -418,7 +418,7 @@ pub mod ListAllDomainFlags {
 pub struct ListAllDomainsRequest(generated::remote_connect_list_all_domains_args);
 
 impl ListAllDomainsRequest {
-    pub fn new(flags: ListAllDomainFlags::ListAllDomainsFlags) -> Self {
+    pub fn new(flags: ListAllDomainsFlags::ListAllDomainsFlags) -> Self {
         let payload = generated::remote_connect_list_all_domains_args {
             need_results: 1,
             flags: flags.bits(),
