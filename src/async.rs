@@ -274,7 +274,7 @@ impl<'a> VolumeOperations<'a> {
  
         self.client.request_sink_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(stream_sender), Some(sink_receiver))
                    .map_err(|e| e.into())
-                   .and_then(move |_| uploader(LibvirtSink { inner: sink_sender }).into_future().map_err(|e| panic!(e)))
+                   .and_then(move |_| uploader(LibvirtSink { inner: sink_sender }).into_future())
                    .and_then(|_| stream_receiver.into_future().map_err(|e| panic!("Unexpected error in mpsc receiver: {:?}", e)))
                    .and_then(|(ev, _)| {
                         Client::handle_response(ev.unwrap()).map_err(|e| e.into())
@@ -355,7 +355,7 @@ impl<'a> DomainOperations<'a> {
         self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_GET_INFO, payload).map(|resp| resp.into()).boxed()
     }
     /// Collect a possibly-filtered list of all domains, and return an allocated array of information for each. 
-    pub fn list(&self, flags: request::ListAllDomainFlags::ListAllDomainsFlags) -> ::futures::BoxFuture<Vec<request::Domain>, LibvirtError> {
+    pub fn list(&self, flags: request::ListAllDomainsFlags::ListAllDomainsFlags) -> ::futures::BoxFuture<Vec<request::Domain>, LibvirtError> {
         let payload = request::ListAllDomainsRequest::new(flags);
         self.client.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_DOMAINS, payload).map(|resp| resp.into()).boxed()
     }
@@ -470,174 +470,38 @@ impl Service for Client {
     }
 }
 
-#[test]
-fn pools_and_volumes() {
+#[cfg(test)]
+mod tests {
+    use std::fmt::Debug;
     use ::tokio_core::reactor::Core;
-    use ::futures::{Stream,Sink};
+    use ::async::Client;
+    use futures::{Future,IntoFuture};
 
-    ::env_logger::init();
-    let mut core = Core::new().unwrap();
-    let handle = core.handle(); 
-    //let cpupool = ::futures_cpupool::new(4);
-    let client = Client::connect("/var/run/libvirt/libvirt-sock", &handle).unwrap();
-    let result = core.run({
-        client.auth()
-            .and_then(|_| client.open())
-            .and_then(|_| client.version())
-            .and_then(|_| client.pool().list(request::ListAllStoragePoolsFlags::ListAllStoragePoolsFlags::empty()))
-            .and_then(|vols| client.volume().lookup_by_name(&vols[0], "test-volume"))
-            .and_then(|vol| {
-                use std::fs;
-                use std::os::unix::fs::MetadataExt;
-                let m = fs::metadata("/etc/passwd").unwrap();
-                let len = m.size(); 
-                println!("Uploading file of size {}", len);
-                client.volume().upload(&vol, 0, len)
-            })
-            .and_then(|sink| {
-                handle.spawn({
-                    println!("Got upload stream");
-                    read_file_to_sink("/etc/passwd", sink).and_then(|_| {
-                        println!("UPLOADED");
-                        Ok(())
-                    }).or_else(|e| {
-                        println!("UPLOAD FAIL {:?}", e);
-                        Ok(())
-                    })
+    fn connect() -> (Client, Core) {
+        let core = Core::new().unwrap();
+        let handle = core.handle();
+        let client = Client::connect("/var/run/libvirt/libvirt-sock", &handle).unwrap();
+        (client, core)
+    }
 
-                    /*
-                    use std::io::Read;
-                    use std::fs::File;
-                    let mut file = File::open("/etc/passwd").unwrap();
-                    let mut buf = BytesMut::with_capacity(1024 * 1024);
-                    unsafe { buf.set_len(1024) };
-                    file.read_exact(&mut buf[0..1024]).unwrap();
-                    sink.send(buf).and_then(|_| {
-                        println!("UPLOADED");
-                        Ok(())
-                    }).or_else(|e| {
-                        println!("UPLOAD FAIL {:?}", e);
-                        Ok(())
-                    })
-                    */
-                });
-                Ok(())
-            })
-    }).unwrap();
+    fn run_connected<'a, P, F, I>(f: P)
+     where P: FnOnce(Client) -> F,
+           I: Debug,
+           F: IntoFuture<Item=I, Error=::LibvirtError> + 'static {
+        let (client, mut core) = connect();
+        let result = core.run({
+            client.auth()
+           .and_then(|_| client.open())
+           .and_then(|_| {
+               let c = client.clone();
+               f(c)
+           })
+        }).unwrap();
+        println!("{:?}", result);
+    }
 
-    println!("RESULT: {:?}", result);
-
-    loop {
-        core.turn(None);
+    #[test]
+    fn test_version() {
+        run_connected(|client| client.version())
     }
 }
-
-/*
-#[test]
-fn pools_and_volumes() {
-    use ::tokio_core::reactor::Core;
-    use ::futures::Stream;
-
-    ::env_logger::init();
-    let mut core = Core::new().unwrap();
-    let handle = core.handle(); 
-    let client = Client::connect("/var/run/libvirt/libvirt-sock", &handle).unwrap();
-    let result = core.run({
-        client.auth()
-            .and_then(|_| client.open())
-            .and_then(|_| client.version())
-            .and_then(|_| client.pool().list(request::ListAllStoragePoolsFlags::ListAllStoragePoolsFlags::empty()))
-            .and_then(|vols| client.volume().lookup_by_name(&vols[0], "test-volume"))
-            .and_then(|vol| client.volume().download(&vol, 0, 1024))
-            .and_then(|stream| {
-                println!("Got download stream");
-                handle.spawn({
-                    let buf = BytesMut::with_capacity(1024 * 1024);
-                    stream.fold(buf, move |mut buf, part| {
-                        buf.extend_from_slice(&part);
-                        future::ok(buf)
-                    }).and_then(|buf| {
-                        use std::io::Write;
-                        use std::fs::OpenOptions;
-                        println!("FINAL RESULT {:?}", buf.len());
-                        let mut f = OpenOptions::new().write(true).create(true).open("test.img").unwrap();
-                        f.write_all(&buf);
-                        Ok(())
-                    })
-                });
-                Ok(())
-            })
-    }).unwrap();
-
-    println!("RESULT: {:?}", result);
-
-    loop {
-        core.turn(None);
-    }
-}
-*/
-
-/*
-#[test]
-fn such_async() {
-    use ::tokio_core::reactor::Core;
-    use ::futures::Stream;
-
-    ::env_logger::init();
-    let mut core = Core::new().unwrap();
-    let handle = core.handle(); 
-    let client = Client::connect("/var/run/libvirt/libvirt-sock", &handle).unwrap();
-    let uuid = ::uuid::Uuid::parse_str("61737ee1-8fd0-47de-a7af-156102602cf1").unwrap();
-    let result = core.run({
-        client.auth()
-            .and_then(|_| client.open())
-            .and_then(|_| client.version())
-            .and_then(|_| client.domain().list(request::ListAllDomainFlags::DOMAINS_ACTIVE | request::ListAllDomainFlags::DOMAINS_INACTIVE))
-            .and_then(|_| client.pool().list(request::ListAllStoragePoolsFlags::ListAllStoragePoolsFlags::empty()).map(|list| println!("{:?}",list)))
-            .and_then(|_| client.domain().lookup_by_uuid(&uuid))
-            .and_then(|dom| {
-                client.domain().start(dom, request::DomainCreateFlags::DomainCreateFlags::empty())
-            }).and_then(|dom| {
-                client.domain().screenshot(&dom, 0)
-            }).and_then(|(mime, stream)| {
-                println!("Got {:?} stream", mime);
-                handle.spawn({
-                    let buf = BytesMut::with_capacity(1024 * 1024);
-                    stream.fold(buf, move |mut buf, part| {
-                        buf.extend_from_slice(&part);
-                        future::ok(buf)
-                    }).and_then(|buf| {
-                        use std::io::Write;
-                        use std::fs::OpenOptions;
-                        println!("FINAL RESULT {:?}", buf.len());
-                        let mut f = OpenOptions::new().write(true).create(true).open("test.ppm").unwrap();
-                        f.write_all(&buf);
-                        Ok(())
-                    })
-                });
-                Ok(())
-            })
-             /*.and_then(|dom| {
-                client.domain().register_event(&dom, 0)
-            }).and_then(|events| {
-                handle.spawn(events.for_each(|ev| {
-                    println!("EVENT {:?}", ev);
-                    Ok(())
-                }));
-                Ok(())
-            })
-            */
-    }).unwrap();
-    //println!("RESULT {:?}", result);
-    loop {
-        /*
-        result.for_each(|ev| {
-            println!("EVENT {:?}", ev);
-            Ok(())
-        })
-        */
-        core.turn(None);
-        //println!("CORE TURNED");
-    }
-}
-*/
