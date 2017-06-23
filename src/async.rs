@@ -366,7 +366,7 @@ impl<'a> DomainOperations<'a> {
         self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_LOOKUP_BY_UUID, pl).map(|resp| resp.domain()).boxed()
     }
 
-    pub fn register_event(&self, dom: &request::Domain, event: i32) -> ::futures::BoxFuture<EventStream<::request::DomainEvent>, LibvirtError> {
+    pub fn register_event(&self, dom: Option<&request::Domain>, event: i32) -> ::futures::BoxFuture<EventStream<::request::DomainEvent>, LibvirtError> {
         let pl = request::DomainEventCallbackRegisterAnyRequest::new(event, dom);
         let map = self.client.events.clone();
         self.client.request(request::remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_CALLBACK_REGISTER_ANY, pl)
