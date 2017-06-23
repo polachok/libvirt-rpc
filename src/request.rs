@@ -459,7 +459,7 @@ rpc!(DomainEventRegisterAnyRequest => DomainEventRegisterAnyResponse);
 use generated::remote_connect_domain_event_callback_register_any_args;
 req!(DomainEventCallbackRegisterAnyRequest: remote_connect_domain_event_callback_register_any_args {
     eventID as event: i32 => event,
-    dom as domain: &Domain => Some(Box::new(domain.0.clone()))
+    dom as domain: Option<&Domain> => domain.map(|dom| Box::new(dom.0.clone()))
 });
 
 resp!(DomainEventCallbackRegisterAnyResponse: generated::remote_connect_domain_event_callback_register_any_ret);
