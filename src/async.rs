@@ -41,6 +41,8 @@ use ::futures::sync::mpsc::{Sender,Receiver};
 use ::proto::{LibvirtProto, LibvirtRequest, LibvirtResponse};
 pub use ::proto::{LibvirtSink, LibvirtStream, EventStream};
 
+type LibvirtFuture<T> = Box<Future<Item = T, Error = LibvirtError>>;
+
 /// Libvirt client
 #[derive(Clone)]
 pub struct Client {
@@ -90,7 +92,7 @@ impl Client {
     }
 
     fn request<P>(&self, procedure: request::remote_procedure, payload: P) ->
-     ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
+     LibvirtFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response>
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
     {
@@ -98,7 +100,7 @@ impl Client {
     }
 
     fn request_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<Sender<LibvirtResponse>>) ->
-     ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
+     Box<Future<Item = <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, Error = LibvirtError>>
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
     {
@@ -106,7 +108,7 @@ impl Client {
     }
 
     fn request_sink<P>(&self, procedure: request::remote_procedure, payload: P, sink: Option<Receiver<BytesMut>>) ->
-     ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
+     Box<Future<Item = <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, Error = LibvirtError>>
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
     {
@@ -114,38 +116,37 @@ impl Client {
     }
 
     fn request_sink_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<Sender<LibvirtResponse>>, sink: Option<Receiver<BytesMut>>) ->
-     ::futures::BoxFuture<<P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, LibvirtError>
+     Box<Future<Item = <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, Error = LibvirtError>>
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
      {
         let req = Self::pack(procedure, payload, stream, sink);
         match req {
             Err(e) => {
-                future::err(e.into()).boxed()
+                Box::new(future::err(e.into()))
             },
-            Ok(req) => self.call(req)
+            Ok(req) => Box::new(self.call(req)
                         .map_err(|e| e.into())
-                        .and_then(Self::handle_response)
-                        .boxed()
+                        .and_then(Self::handle_response))
         }
     }
 
     /// Retrieves authentication methods (currently only unauthenticated connections are supported)
-    pub fn auth(&self) -> ::futures::BoxFuture<request::AuthListResponse, LibvirtError> {
+    pub fn auth(&self) -> LibvirtFuture<request::AuthListResponse> {
         let pl = request::AuthListRequest::new();
         self.request(request::remote_procedure::REMOTE_PROC_AUTH_LIST, pl)
     }
 
     /// Opens up a read-write connection to the system qemu hypervisor driver
-    pub fn open(&self) -> ::futures::BoxFuture<(), LibvirtError> {
+    pub fn open(&self) -> LibvirtFuture<()> {
         let pl = request::ConnectOpenRequest::new();
-        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_OPEN, pl).map(|_| ()).boxed()
+        Box::new(self.request(request::remote_procedure::REMOTE_PROC_CONNECT_OPEN, pl).map(|_| ()))
     }
 
     /// Can be used to obtain the version of the libvirt software in use on the host
-    pub fn version(&self) -> ::futures::BoxFuture<(u32, u32, u32), LibvirtError> {
+    pub fn version(&self) -> LibvirtFuture<(u32, u32, u32)> {
         let pl = request::GetLibVersionRequest::new();
-        self.request(request::remote_procedure::REMOTE_PROC_CONNECT_GET_LIB_VERSION, pl).map(|resp| resp.version()).boxed()
+        Box::new(self.request(request::remote_procedure::REMOTE_PROC_CONNECT_GET_LIB_VERSION, pl).map(|resp| resp.version()))
     }
 
     pub fn domain(&self) -> DomainOperations {
@@ -169,23 +170,23 @@ pub struct VolumeOperations<'a> {
 impl<'a> VolumeOperations<'a> {
     /// Create a storage volume within a pool based on an XML description. Not all pools support creation of volumes.
     pub fn create(&self, pool: &request::StoragePool, xml: &str,
-                  flags: request::StorageVolCreateXmlFlags::StorageVolCreateXmlFlags) -> ::futures::BoxFuture<request::Volume, LibvirtError> {
+                  flags: request::StorageVolCreateXmlFlags::StorageVolCreateXmlFlags) -> LibvirtFuture<request::Volume> {
         let payload = request::StorageVolCreateXmlRequest::new(pool, xml, flags);
-        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_CREATE_XML, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_CREATE_XML, payload).map(|resp| resp.into()))
     }
 
     /// Create a storage volume in the parent pool, using the 'clonevol' volume as input.
     /// Information for the new volume (name, perms) are passed via a typical volume XML description.
     pub fn create_from(&self, pool: &request::StoragePool, xml: &str, vol: &request::Volume,
-                        flags: request::StorageVolCreateXmlFlags::StorageVolCreateXmlFlags) -> ::futures::BoxFuture<request::Volume, LibvirtError> {
+                        flags: request::StorageVolCreateXmlFlags::StorageVolCreateXmlFlags) -> LibvirtFuture<request::Volume> {
         let payload = request::StorageVolCreateXmlFromRequest::new(pool, xml, vol, flags);
-        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_CREATE_XML_FROM, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_CREATE_XML_FROM, payload).map(|resp| resp.into()))
     }
 
     /// Delete the storage volume from the pool
-    pub fn delete(&self, vol: request::Volume) -> ::futures::BoxFuture<(), LibvirtError> {
+    pub fn delete(&self, vol: request::Volume) -> LibvirtFuture<()> {
         let payload = request::StorageVolDeleteRequest::new(vol, 0);
-        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DELETE, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DELETE, payload).map(|resp| resp.into()))
     }
 
     /// Ensure data previously on a volume is not accessible to future reads.
@@ -193,14 +194,14 @@ impl<'a> VolumeOperations<'a> {
     /// It is storage backend dependent whether the format and size information is regenerated once the initial volume wipe is completed.
     /// Depending on the actual volume representation, this call may not overwrite the physical location of the volume.
     /// For instance, files stored journaled, log structured, copy-on-write, versioned, and network file systems are known to be problematic.
-    pub fn wipe(&self, vol: &request::Volume) -> ::futures::BoxFuture<(), LibvirtError> {
+    pub fn wipe(&self, vol: &request::Volume) -> LibvirtFuture<()> {
         let payload = request::StorageVolWipeRequest::new(vol, 0);
-        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_WIPE, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_WIPE, payload).map(|resp| resp.into()))
     }
 
-    pub fn lookup_by_name(&self, pool: &request::StoragePool, name: &str) -> ::futures::BoxFuture<request::Volume, LibvirtError> {
+    pub fn lookup_by_name(&self, pool: &request::StoragePool, name: &str) -> LibvirtFuture<request::Volume> {
         let payload = request::StorageVolLookupByNameRequest::new(pool, name);
-        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_LOOKUP_BY_NAME, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_LOOKUP_BY_NAME, payload).map(|resp| resp.into()))
     }
 
     /// Changes the capacity of the storage volume @vol to @capacity.
@@ -219,22 +220,22 @@ impl<'a> VolumeOperations<'a> {
     /// it is possible to attempt a reduction in capacity even though it might cause data loss.
     /// If VIR_STORAGE_VOL_RESIZE_DELTA is also present, then @capacity is subtracted from the current size; without it,
     /// @capacity represents the absolute new size regardless of whether it is larger or smaller than the current size.
-    pub fn resize(&self, vol: &request::Volume, capacity: u64, flags: request::StorageVolResizeFlags::StorageVolResizeFlags) -> ::futures::BoxFuture<(), LibvirtError> {
+    pub fn resize(&self, vol: &request::Volume, capacity: u64, flags: request::StorageVolResizeFlags::StorageVolResizeFlags) -> LibvirtFuture<()> {
         let payload = request::StorageVolResizeRequest::new(vol, capacity, flags);
-        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_RESIZE, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_RESIZE, payload).map(|resp| resp.into()))
     }
 
     /// Download the content of the volume as a stream. If @length is zero, then the remaining contents of the volume after @offset will be downloaded.
     /// This call sets up an asynchronous stream; subsequent use of stream APIs is necessary to transfer the actual data,
     /// determine how much data is successfully transferred, and detect any errors.
     /// The results will be unpredictable if another active stream is writing to the storage volume.
-    pub fn download(&self, vol: &request::Volume, offset: u64, length: u64) -> ::futures::BoxFuture<LibvirtStream, LibvirtError> {
+    pub fn download(&self, vol: &request::Volume, offset: u64, length: u64) -> LibvirtFuture<LibvirtStream> {
         let pl = request::StorageVolDownloadRequest::new(vol, offset, length, 0);
         let (sender, receiver) = ::futures::sync::mpsc::channel(0);
 
-        self.client.request_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DOWNLOAD, pl, Some(sender)).map(move |_| {
+        Box::new(self.client.request_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DOWNLOAD, pl, Some(sender)).map(move |_| {
             LibvirtStream::from(receiver)
-        }).boxed()
+        }))
     }
 
     /// Upload new content to the volume from a stream. This call will fail if @offset + @length exceeds the size of the volume.
@@ -245,17 +246,17 @@ impl<'a> VolumeOperations<'a> {
     ///
     /// When the data stream is closed whether the upload is successful or not the target storage pool will be refreshed to reflect pool
     /// and volume changes as a result of the upload. Depending on the target volume storage backend and the source stream type for a successful upload, the target volume may take on the characteristics from the source stream such as format type, capacity, and allocation.
-    pub fn upload(&self, vol: &request::Volume, offset: u64, length: u64) -> ::futures::BoxFuture<LibvirtSink, LibvirtError> {
+    pub fn upload(&self, vol: &request::Volume, offset: u64, length: u64) -> LibvirtFuture<LibvirtSink> {
         let pl = request::StorageVolUploadRequest::new(vol, offset, length, 0);
         let (sender, receiver) = ::futures::sync::mpsc::channel(64);
  
-        self.client.request_sink(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(receiver)).map(move |_| {
+        Box::new(self.client.request_sink(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(receiver)).map(move |_| {
            LibvirtSink { inner: sender }
-        }).boxed()
+        }))
     }
 
     /// Same as `upload` but accepts callback and returns upload result
-    pub fn upload_with<F, R>(&self, vol: &request::Volume, offset: u64, length: u64, uploader: F) -> ::futures::BoxFuture<(), R::Error>
+    pub fn upload_with<F, R>(&self, vol: &request::Volume, offset: u64, length: u64, uploader: F) -> Box<Future<Item = (), Error = R::Error>>
     where F: FnOnce(LibvirtSink) -> R + Send + 'static,
           R: ::futures::IntoFuture + 'static,
           R::Future: Send + 'static,
@@ -267,13 +268,13 @@ impl<'a> VolumeOperations<'a> {
         let (sink_sender, sink_receiver) = ::futures::sync::mpsc::channel(64);
         let (stream_sender, stream_receiver) = ::futures::sync::mpsc::channel(64);
  
-        self.client.request_sink_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(stream_sender), Some(sink_receiver))
+        Box::new(self.client.request_sink_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(stream_sender), Some(sink_receiver))
                    .map_err(|e| e.into())
                    .and_then(move |_| uploader(LibvirtSink { inner: sink_sender }).into_future())
                    .and_then(|_| stream_receiver.into_future().map_err(|e| panic!("Unexpected error in mpsc receiver: {:?}", e)))
                    .and_then(|(ev, _)| {
                         Client::handle_response(ev.unwrap()).map_err(|e| e.into())
-                   }).boxed()
+                   }))
     }
 }
 
@@ -284,58 +285,58 @@ pub struct PoolOperations<'a> {
 
 impl<'a> PoolOperations<'a> {
     /// Collect the list of storage pools
-    pub fn list(&self, flags: request::ListAllStoragePoolsFlags::ListAllStoragePoolsFlags) -> ::futures::BoxFuture<Vec<request::StoragePool>, LibvirtError> {
+    pub fn list(&self, flags: request::ListAllStoragePoolsFlags::ListAllStoragePoolsFlags) -> LibvirtFuture<Vec<request::StoragePool>> {
         let payload = request::ListAllStoragePoolsRequest::new(flags);
-        self.client.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_STORAGE_POOLS, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_STORAGE_POOLS, payload).map(|resp| resp.into()))
     }
 
     /// Define an inactive persistent storage pool or modify an existing persistent one from the XML description.
-    pub fn define(&self, xml: &str) -> ::futures::BoxFuture<request::StoragePool, LibvirtError> {
+    pub fn define(&self, xml: &str) -> LibvirtFuture<request::StoragePool> {
         let payload = request::StoragePoolDefineXmlRequest::new(xml, 0);
-        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_DEFINE_XML, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_DEFINE_XML, payload).map(|resp| resp.into()))
     }
 
     /// Fetch a storage pool based on its globally unique id
-    pub fn lookup_by_uuid(&self, uuid: &::uuid::Uuid) -> ::futures::BoxFuture<request::StoragePool, LibvirtError> {
+    pub fn lookup_by_uuid(&self, uuid: &::uuid::Uuid) -> LibvirtFuture<request::StoragePool> {
         let payload = request::StoragePoolLookupByUuidRequest::new(uuid);
-        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LOOKUP_BY_UUID, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LOOKUP_BY_UUID, payload).map(|resp| resp.into()))
     }
 
     /// Fetch a storage pool based on its name
-    pub fn lookup_by_name(&self, name: &str) -> ::futures::BoxFuture<request::StoragePool, LibvirtError> {
+    pub fn lookup_by_name(&self, name: &str) -> LibvirtFuture<request::StoragePool> {
         let payload = request::StoragePoolLookupByNameRequest::new(name);
-        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LOOKUP_BY_NAME, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LOOKUP_BY_NAME, payload).map(|resp| resp.into()))
     }
 
     /// Starts an inactive storage pool
-    pub fn start(&self, pool: &request::StoragePool) -> ::futures::BoxFuture<(), LibvirtError> {
+    pub fn start(&self, pool: &request::StoragePool) -> LibvirtFuture<()> {
         let payload = request::StoragePoolCreateRequest::new(pool, 0);
-        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_CREATE, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_CREATE, payload).map(|resp| resp.into()))
     }
 
     /// Destroy an active storage pool. This will deactivate the pool on the host, but keep any persistent config associated with it.
     /// If it has a persistent config it can later be restarted with start()
-    pub fn destroy(&self, pool: &request::StoragePool) -> ::futures::BoxFuture<(), LibvirtError> {
+    pub fn destroy(&self, pool: &request::StoragePool) -> LibvirtFuture<()> {
         let payload = request::StoragePoolDestroyRequest::new(pool);
-        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_DESTROY, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_DESTROY, payload).map(|resp| resp.into()))
     }
 
     /// Undefine an inactive storage pool
-    pub fn undefine(&self, pool: request::StoragePool) -> ::futures::BoxFuture<(), LibvirtError> {
+    pub fn undefine(&self, pool: request::StoragePool) -> LibvirtFuture<()> {
         let payload = request::StoragePoolUndefineRequest::new(pool);
-        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_UNDEFINE, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_UNDEFINE, payload).map(|resp| resp.into()))
     }
 
     /// Fetch list of storage volume names
-    pub fn list_volume_names(&self, pool: &request::StoragePool) -> ::futures::BoxFuture<Vec<String>, LibvirtError> {
+    pub fn list_volume_names(&self, pool: &request::StoragePool) -> LibvirtFuture<Vec<String>> {
         let payload = request::StoragePoolListVolumesRequest::new(pool, request::generated::REMOTE_STORAGE_VOL_LIST_MAX as i32);
-        self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LIST_VOLUMES, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LIST_VOLUMES, payload).map(|resp| resp.into()))
     }
 
     /// Collect the list of storage volumes
-    pub fn list_volumes(&self, pool: &request::StoragePool) -> ::futures::BoxFuture<Vec<request::Volume>, LibvirtError> {
-            let payload = request::StoragePoolListAllVolumesRequest::new(pool, 1, 0);
-            self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LIST_ALL_VOLUMES, payload).map(|resp| resp.into()).boxed()
+    pub fn list_volumes(&self, pool: &request::StoragePool) -> LibvirtFuture<Vec<request::Volume>> {
+        let payload = request::StoragePoolListAllVolumesRequest::new(pool, 1, 0);
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_POOL_LIST_ALL_VOLUMES, payload).map(|resp| resp.into()))
     }
 }
 
@@ -345,60 +346,60 @@ pub struct DomainOperations<'a> {
 }
 
 impl<'a> DomainOperations<'a> {
-    pub fn info(&self, dom: &request::Domain) -> ::futures::BoxFuture<request::DomainInfo, LibvirtError> {
+    pub fn info(&self, dom: &request::Domain) -> LibvirtFuture<request::DomainInfo> {
         let payload = request::DomainGetInfoRequest::new(dom);
-        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_GET_INFO, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_GET_INFO, payload).map(|resp| resp.into()))
     }
     /// Collect a possibly-filtered list of all domains, and return an allocated array of information for each. 
-    pub fn list(&self, flags: request::ListAllDomainsFlags::ListAllDomainsFlags) -> ::futures::BoxFuture<Vec<request::Domain>, LibvirtError> {
+    pub fn list(&self, flags: request::ListAllDomainsFlags::ListAllDomainsFlags) -> LibvirtFuture<Vec<request::Domain>> {
         let payload = request::ListAllDomainsRequest::new(flags);
-        self.client.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_DOMAINS, payload).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_DOMAINS, payload).map(|resp| resp.into()))
     }
 
     /// Lookup a domain on the given hypervisor based on its UUID.
-    pub fn lookup_by_uuid(&self, uuid: &::uuid::Uuid) -> ::futures::BoxFuture<request::Domain, LibvirtError> {
+    pub fn lookup_by_uuid(&self, uuid: &::uuid::Uuid) -> LibvirtFuture<request::Domain> {
         let pl = request::DomainLookupByUuidRequest::new(uuid);
-        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_LOOKUP_BY_UUID, pl).map(|resp| resp.domain()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_LOOKUP_BY_UUID, pl).map(|resp| resp.domain()))
     }
 
-    pub fn register_event(&self, dom: Option<&request::Domain>, event: i32) -> ::futures::BoxFuture<EventStream<::request::DomainEvent>, LibvirtError> {
+    pub fn register_event(&self, dom: Option<&request::Domain>, event: i32) -> LibvirtFuture<EventStream<::request::DomainEvent>> {
         let pl = request::DomainEventCallbackRegisterAnyRequest::new(event, dom);
         let (sender, receiver) = ::futures::sync::mpsc::channel(1024);
-        self.client.request_stream(request::remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_CALLBACK_REGISTER_ANY, pl, Some(sender))
+        Box::new(self.client.request_stream(request::remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_CALLBACK_REGISTER_ANY, pl, Some(sender))
             .map(move |resp| {
                 let id = resp.callback_id();
                 debug!("REGISTERED CALLBACK ID {}", id);
                 {
                     EventStream::from(receiver)
                 }
-            }).boxed()
+            }))
     }
     /* TODO implement unregister */
 
     /// Launch a defined domain. If the call succeeds the domain moves from the defined to the running domains pools.
-    pub fn start(&self, dom: request::Domain, flags: request::DomainCreateFlags::DomainCreateFlags) -> ::futures::BoxFuture<request::Domain, LibvirtError> {
+    pub fn start(&self, dom: request::Domain, flags: request::DomainCreateFlags::DomainCreateFlags) -> LibvirtFuture<request::Domain> {
         let pl = request::DomainCreateRequest::new(dom, flags);
-        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_CREATE_WITH_FLAGS, pl).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_CREATE_WITH_FLAGS, pl).map(|resp| resp.into()))
     }
 
     /// Destroy the domain object. The running instance is shutdown if not down already and all resources used by it are given back to the hypervisor.
-    pub fn destroy(&self, dom: request::Domain, flags: request::DomainDestroyFlags::DomainDestroyFlags) -> ::futures::BoxFuture<(), LibvirtError> {
+    pub fn destroy(&self, dom: request::Domain, flags: request::DomainDestroyFlags::DomainDestroyFlags) -> LibvirtFuture<()> {
         let pl = request::DomainDestroyRequest::new(dom, flags);
-        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DESTROY_FLAGS, pl).map(|_| ()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DESTROY_FLAGS, pl).map(|_| ()))
     }
 
     /// Defines a domain, but does not start it. This definition is persistent, until explicitly undefined with virDomainUndefine().
     /// A previous definition for this domain would be overridden if it already exists.
-    pub fn define(&self, xml: &str) -> ::futures::BoxFuture<request::Domain, LibvirtError> {
+    pub fn define(&self, xml: &str) -> LibvirtFuture<request::Domain> {
         let pl = request::DomainDefineXMLRequest::new(xml, 1); /* TODO: flags */
-        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DEFINE_XML_FLAGS, pl).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DEFINE_XML_FLAGS, pl).map(|resp| resp.into()))
     }
 
     /// Undefine a domain. If the domain is running, it's converted to transient domain, without stopping it.
     /// If the domain is inactive, the domain configuration is removed.
-    pub fn undefine(&self, dom: request::Domain) -> ::futures::BoxFuture<(), LibvirtError> {
+    pub fn undefine(&self, dom: request::Domain) -> LibvirtFuture<()> {
         let pl = request::DomainUndefineRequest::new(dom, 0); /* TODO: flags */
-        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_UNDEFINE_FLAGS, pl).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_UNDEFINE_FLAGS, pl).map(|resp| resp.into()))
     }
 
     /// Shutdown a domain, the domain object is still usable thereafter, but the domain OS is being stopped.
@@ -409,27 +410,27 @@ impl<'a> DomainOperations<'a> {
     /// the differences from virDomainDestroy() are that the guests disk storage will be in a stable state
     /// rather than having the (virtual) power cord pulled, and this command returns as soon as the shutdown
     /// request is issued rather than blocking until the guest is no longer running.
-    pub fn shutdown(&self, dom: &request::Domain) -> ::futures::BoxFuture<(), LibvirtError> {
+    pub fn shutdown(&self, dom: &request::Domain) -> LibvirtFuture<()> {
         let pl = request::DomainShutdownRequest::new(dom);
-        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_SHUTDOWN, pl).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_SHUTDOWN, pl).map(|resp| resp.into()))
     }
 
     /// Reboot a domain, the domain object is still usable thereafter, but the domain OS is being stopped for a restart.
     /// Note that the guest OS may ignore the request.
     ///
     /// Additionally, the hypervisor may check and support the domain 'on_reboot' XML setting resulting in a domain that shuts down instead of rebooting.
-    pub fn reboot(&self, dom: &request::Domain) -> ::futures::BoxFuture<(), LibvirtError> {
+    pub fn reboot(&self, dom: &request::Domain) -> LibvirtFuture<()> {
         let pl = request::DomainRebootRequest::new(dom, 0);
-        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_REBOOT, pl).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_REBOOT, pl).map(|resp| resp.into()))
     }
 
     /// Reset a domain immediately without any guest OS shutdown.
     /// Reset emulates the power reset button on a machine, where all hardware sees the RST line set and reinitializes internal state.
     ///
     /// Note that there is a risk of data loss caused by reset without any guest OS shutdown.
-    pub fn reset(&self, dom: &request::Domain) -> ::futures::BoxFuture<(), LibvirtError> {
+    pub fn reset(&self, dom: &request::Domain) -> LibvirtFuture<()> {
         let pl = request::DomainResetRequest::new(dom, 0);
-        self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_RESET, pl).map(|resp| resp.into()).boxed()
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_RESET, pl).map(|resp| resp.into()))
     }
 
     /// Take a screenshot of current domain console as a stream. The image format is hypervisor specific.
@@ -440,13 +441,13 @@ impl<'a> DomainOperations<'a> {
     ///
     /// The screen ID is the sequential number of screen. In case of multiple graphics cards, heads are enumerated before devices,
     /// e.g. having two graphics cards, both with four heads, screen ID 5 addresses the second head on the second card.
-    pub fn screenshot(&self, dom: &request::Domain, screen: u32) -> ::futures::BoxFuture<(Option<String>, LibvirtStream), LibvirtError> {
+    pub fn screenshot(&self, dom: &request::Domain, screen: u32) -> LibvirtFuture<(Option<String>, LibvirtStream)> {
         let pl = request::DomainScreenshotRequest::new(dom, screen, 0);
         let (sender, receiver) = ::futures::sync::mpsc::channel(0);
 
-        self.client.request_stream(request::remote_procedure::REMOTE_PROC_DOMAIN_SCREENSHOT, pl, Some(sender)).map(move |resp|{
+        Box::new(self.client.request_stream(request::remote_procedure::REMOTE_PROC_DOMAIN_SCREENSHOT, pl, Some(sender)).map(move |resp|{
             (resp.into(), LibvirtStream::from(receiver))
-        }).boxed()
+        }))
     }
 }
 
@@ -454,11 +455,11 @@ impl Service for Client {
     type Request = LibvirtRequest;
     type Response = LibvirtResponse;
     type Error = ::std::io::Error;
-    type Future = ::futures::BoxFuture<Self::Response, Self::Error>;
+    type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
 
     fn call(&self, req: Self::Request) -> Self::Future {
         let inner = self.inner.lock().unwrap();
-        inner.call(req).boxed()
+        Box::new(inner.call(req))
     }
 }
 
