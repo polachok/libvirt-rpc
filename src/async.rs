@@ -29,7 +29,6 @@
 //!
 use std::io::Cursor;
 use std::path::Path;
-use std::collections::HashMap;
 use std::sync::{Arc,Mutex};
 use ::xdr_codec::{Pack,Unpack};
 use ::bytes::{BufMut, BytesMut};
@@ -45,7 +44,6 @@ pub use ::proto::{LibvirtSink, LibvirtStream, EventStream};
 /// Libvirt client
 #[derive(Clone)]
 pub struct Client {
-    events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
     inner: Arc<Mutex<multiplex::ClientService<::tokio_uds::UnixStream, LibvirtProto>>>,
 }
 
@@ -53,13 +51,10 @@ impl Client {
     /// opens libvirt connection over unix socket
     pub fn connect<P: AsRef<Path>>(path: P, handle: &::tokio_core::reactor::Handle) -> Result<Client, ::std::io::Error> {
         use ::tokio_uds_proto::UnixClient;
-        let events = Arc::new(Mutex::new(HashMap::new()));
-        let proto = LibvirtProto::new(events.clone());
-        UnixClient::new(proto)
+        UnixClient::new(LibvirtProto)
                 .connect(path, handle)
                 .map(|inner| Client {
                      inner: Arc::new(Mutex::new(inner)),
-                     events: events.clone(),
                 })
     }
 
@@ -368,16 +363,13 @@ impl<'a> DomainOperations<'a> {
 
     pub fn register_event(&self, dom: Option<&request::Domain>, event: i32) -> ::futures::BoxFuture<EventStream<::request::DomainEvent>, LibvirtError> {
         let pl = request::DomainEventCallbackRegisterAnyRequest::new(event, dom);
-        let map = self.client.events.clone();
-        self.client.request(request::remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_CALLBACK_REGISTER_ANY, pl)
+        let (sender, receiver) = ::futures::sync::mpsc::channel(1024);
+        self.client.request_stream(request::remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_CALLBACK_REGISTER_ANY, pl, Some(sender))
             .map(move |resp| {
                 let id = resp.callback_id();
                 debug!("REGISTERED CALLBACK ID {}", id);
                 {
-                    let mut map = map.lock().unwrap();
-                    let (sender, receiver) = ::futures::sync::mpsc::channel(1024);
-                    map.insert(id, sender);
-                    EventStream{inner: receiver}
+                    EventStream::from(receiver)
                 }
             }).boxed()
     }

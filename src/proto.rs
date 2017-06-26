@@ -10,6 +10,7 @@ use ::tokio_proto::multiplex::{self, RequestId};
 use ::request;
 use ::futures::{Stream, Sink, Poll, StartSend};
 use ::futures::sync::mpsc::{Sender,Receiver};
+use std::marker::PhantomData;
 
 struct LibvirtCodec;
 
@@ -138,7 +139,8 @@ pub struct LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     /* store here if underlying transport is not ready */
     buffer: Option<(RequestId, LibvirtRequest)>,
     inner: FramedTransport<T, LibvirtCodec>,
-    events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
+    /* procedure -> event stream */
+    events: Arc<Mutex<HashMap<u16, ::futures::sync::mpsc::Sender<LibvirtResponse>>>>,
     /* req.id -> stream */
     streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<LibvirtResponse>>>>,
     /* req.id -> (stream, procedure) */
@@ -146,31 +148,25 @@ pub struct LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
 }
 
 impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
-    fn process_event(&self, resp: &LibvirtResponse) -> ::std::io::Result<bool> {
-        let procedure = unsafe { ::std::mem::transmute(resp.header.proc_ as u16) };
+    fn is_event_register(&self, procedure: request::generated::remote_procedure) -> Option<request::generated::remote_procedure> {
+        match procedure {
+            request::remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_CALLBACK_REGISTER_ANY => {
+                Some(request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE)
+            },
+            _ => None,
+        }
+    }
+
+    fn is_event(&self, procedure: request::generated::remote_procedure) -> bool {
         match procedure {
             request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE => {
-                let msg = {
-                    let mut cursor = Cursor::new(&resp.payload);
-                    let (msg, _) = request::generated::remote_domain_event_callback_lifecycle_msg::unpack(&mut cursor).unwrap();
-                    debug!("LIFECYCLE EVENT (CALLBACK) PL: {:?}", msg);
-                    msg
-                };
-                {
-                    let mut map = self.events.lock().unwrap();
-                    if let Some(sender) = map.get_mut(&msg.callbackID) {
-                        use std::io::ErrorKind;
-                        try!(sender.start_send(msg.into()).map_err(|e| ::std::io::Error::new(ErrorKind::InvalidInput, e.to_string())));
-                        try!(sender.poll_complete().map_err(|e| ::std::io::Error::new(ErrorKind::InvalidInput, e.to_string())));
-                    }
-                }
-                return Ok(true);
+                true
             },
             _ => {
-                debug!("unknown procedure {:?} in {:?}", procedure, resp);
+                debug!("not event: procedure {:?}", procedure);
+                false
             },
         }
-        Ok(false)
     }
 
     fn process_sinks(&mut self) -> StartSend<(RequestId, LibvirtRequest), ::std::io::Error> {
@@ -252,6 +248,20 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
         Err(::std::io::Error::new(::std::io::ErrorKind::WouldBlock, "sinks empty"))
     }
 
+    fn process_event(&self, resp: LibvirtResponse) {
+        let mut events = self.events.lock().unwrap();
+        let proc_ = resp.header.proc_ as u16;
+
+        if let Some(ref mut stream) = events.get_mut(&proc_) {
+            debug!("Event: found event stream for proc {}", proc_);
+            let sender = stream;
+            let _ = sender.start_send(resp);
+            let _ = sender.poll_complete();
+            return
+        }
+        debug!("Event: can't find event stream id for proc {}", proc_);
+    }
+
     fn process_stream(&self, resp: LibvirtResponse) {
         debug!("incoming stream: {:?}", resp.header);
         {
@@ -305,9 +315,13 @@ impl<T> Stream for LibvirtTransport<T> where
                 match async {
                 Async::Ready(Some((id, resp))) => {
                     debug!("FRAME READY ID: {} RESP: {:?}", id, resp);
-                    if try!(self.process_event(&resp)) {
-                            debug!("processed event, get next packet");
-                            return self.poll();
+
+                    let procedure = unsafe { ::std::mem::transmute(resp.header.proc_ as u16) };
+                    if self.is_event(procedure) {
+                        debug!("event received!");
+                        self.process_event(resp);
+                        debug!("processed event msg, get next packet");
+                        return self.poll();
                     }
 
                     if resp.header.type_ == request::generated::virNetMessageType::VIR_NET_STREAM {
@@ -337,6 +351,15 @@ impl<T> Sink for LibvirtTransport<T> where
     fn start_send(&mut self, mut item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
         use ::std::mem;
         use futures::AsyncSink;
+
+        let procedure = unsafe { ::std::mem::transmute(item.1.header.proc_ as u16) };
+        if let Some(event_proc) = self.is_event_register(procedure) {
+            debug!("Sending event request {:?}/{}", procedure, procedure as u16);
+            if let Some(stream) = mem::replace(&mut item.1.stream, None) {
+                let mut events = self.events.lock().unwrap();
+                events.insert(event_proc as u16, stream);
+            }
+        }
 
         if let Some(stream) = mem::replace(&mut item.1.stream, None) {
             debug!("SENDING REQ ID = {} {:?} WITH STREAM", item.0, item.1.header);
@@ -402,17 +425,7 @@ impl<T> Sink for LibvirtTransport<T> where
 }
 
 #[derive(Debug, Clone)]
-pub struct LibvirtProto {
-    events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>,
-}
-
-impl LibvirtProto {
-    pub fn new(
-        events: Arc<Mutex<HashMap<i32, ::futures::sync::mpsc::Sender<::request::DomainEvent>>>>
-    ) -> Self {
-        LibvirtProto { events }
-    }
-}
+pub struct LibvirtProto;
 
 impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWrite + 'static {
     type Request = LibvirtRequest;
@@ -430,7 +443,7 @@ impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWri
         Ok(LibvirtTransport{ 
             buffer: None,
             inner: framed_delimited(framed, LibvirtCodec),
-            events: self.events.clone(),
+            events: Arc::new(Mutex::new(HashMap::new())),
             streams: Arc::new(Mutex::new(HashMap::new())),
             sinks: Arc::new(Mutex::new(HashMap::new())),
         })
@@ -438,15 +451,46 @@ impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWri
 }
 
 pub struct EventStream<T> {
-    pub inner: ::futures::sync::mpsc::Receiver<T>,
+    pub inner: ::futures::sync::mpsc::Receiver<LibvirtResponse>,
+    _phantom: PhantomData<T>,
 }
 
-impl<T> Stream for EventStream<T> {
-    type Item = T;
-    type Error = ();
+impl<T> From<::futures::sync::mpsc::Receiver<LibvirtResponse>> for EventStream<T> {
+    fn from(r: ::futures::sync::mpsc::Receiver<LibvirtResponse>) -> Self {
+        EventStream {
+            inner: r, 
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<U: From<request::generated::remote_domain_event_callback_lifecycle_msg> + ::std::fmt::Debug> Stream for EventStream<U> {
+    type Item = U;
+    type Error = ::LibvirtError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.inner.poll()
+        use futures::Async;
+        match self.inner.poll() {
+            Ok(Async::Ready(Some(resp))) => {
+                let procedure = unsafe { ::std::mem::transmute(resp.header.proc_ as u16) };
+                match procedure {
+                    request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE => {
+                        let mut cursor = Cursor::new(resp.payload);
+                        let (msg, _) = request::generated::remote_domain_event_callback_lifecycle_msg::unpack(&mut cursor).unwrap();
+                        let msg = msg.into();
+                        debug!("LIFECYCLE EVENT (CALLBACK) {:?} {:?}", resp.header, msg);
+                        Ok(Async::Ready(Some(msg)))
+                    },
+                    _ => {
+                        error!("UNKNOWN EVENT RECEIVED {:?}", procedure);
+                        Ok(Async::NotReady)
+                    },
+                }
+            },
+            Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
+            Ok(Async::NotReady) => Ok(Async::NotReady),
+            Err(e) => panic!(e),
+        }
     }
 }
 
