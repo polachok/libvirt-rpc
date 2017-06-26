@@ -29,7 +29,6 @@
 //!
 use std::io::Cursor;
 use std::path::Path;
-use std::sync::{Arc,Mutex};
 use ::xdr_codec::{Pack,Unpack};
 use ::bytes::{BufMut, BytesMut};
 use ::tokio_proto::multiplex::{self};
@@ -46,7 +45,7 @@ type LibvirtFuture<T> = Box<Future<Item = T, Error = LibvirtError>>;
 /// Libvirt client
 #[derive(Clone)]
 pub struct Client {
-    inner: Arc<Mutex<multiplex::ClientService<::tokio_uds::UnixStream, LibvirtProto>>>,
+    inner: multiplex::ClientService<::tokio_uds::UnixStream, LibvirtProto>,
 }
 
 impl Client {
@@ -56,7 +55,7 @@ impl Client {
         UnixClient::new(LibvirtProto)
                 .connect(path, handle)
                 .map(|inner| Client {
-                     inner: Arc::new(Mutex::new(inner)),
+                     inner: inner,
                 })
     }
 
@@ -458,8 +457,7 @@ impl Service for Client {
     type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
 
     fn call(&self, req: Self::Request) -> Self::Future {
-        let inner = self.inner.lock().unwrap();
-        Box::new(inner.call(req))
+        Box::new(self.inner.call(req))
     }
 }
 

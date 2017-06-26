@@ -1,6 +1,5 @@
 use std::io::Cursor;
 use std::collections::HashMap;
-use std::sync::{Arc,Mutex};
 use ::xdr_codec::{Pack,Unpack};
 use ::bytes::{BufMut, BytesMut};
 use ::tokio_io::codec;
@@ -140,11 +139,11 @@ pub struct LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     buffer: Option<(RequestId, LibvirtRequest)>,
     inner: FramedTransport<T, LibvirtCodec>,
     /* procedure -> event stream */
-    events: Arc<Mutex<HashMap<u16, ::futures::sync::mpsc::Sender<LibvirtResponse>>>>,
+    events: HashMap<u16, ::futures::sync::mpsc::Sender<LibvirtResponse>>,
     /* req.id -> stream */
-    streams: Arc<Mutex<HashMap<u64, ::futures::sync::mpsc::Sender<LibvirtResponse>>>>,
+    streams: HashMap<u64, ::futures::sync::mpsc::Sender<LibvirtResponse>>,
     /* req.id -> (stream, procedure) */
-    sinks: Arc<Mutex<HashMap<u64, (::futures::sync::mpsc::Receiver<BytesMut>, i32)>>>,
+    sinks: HashMap<u64, (::futures::sync::mpsc::Receiver<BytesMut>, i32)>,
 }
 
 impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
@@ -174,10 +173,9 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
         use futures::AsyncSink;
         let mut sinks_to_drop = Vec::new();
 
-        let mut sinks = self.sinks.lock().unwrap();
-        debug!("PROCESSING SINKS: count {}", sinks.len());
+        debug!("PROCESSING SINKS: count {}", self.sinks.len());
 
-        for (req_id, &mut (ref mut sink, proc_)) in sinks.iter_mut() {
+        for (req_id, &mut (ref mut sink, proc_)) in self.sinks.iter_mut() {
             debug!("Processing sink {}", req_id);
             let mut total_len = 0;
             let mut count = 0;
@@ -242,17 +240,16 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
         }
 
         for id in sinks_to_drop {
-            sinks.remove(&id);
+            self.sinks.remove(&id);
         }
         debug!("All sinks empty, returning would block");
         Err(::std::io::Error::new(::std::io::ErrorKind::WouldBlock, "sinks empty"))
     }
 
-    fn process_event(&self, resp: LibvirtResponse) {
-        let mut events = self.events.lock().unwrap();
+    fn process_event(&mut self, resp: LibvirtResponse) {
         let proc_ = resp.header.proc_ as u16;
 
-        if let Some(ref mut stream) = events.get_mut(&proc_) {
+        if let Some(ref mut stream) = self.events.get_mut(&proc_) {
             debug!("Event: found event stream for proc {}", proc_);
             let sender = stream;
             let _ = sender.start_send(resp);
@@ -262,21 +259,19 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
         debug!("Event: can't find event stream id for proc {}", proc_);
     }
 
-    fn process_stream(&self, resp: LibvirtResponse) {
+    fn process_stream(&mut self, resp: LibvirtResponse) {
         debug!("incoming stream: {:?}", resp.header);
         {
             let req_id = resp.header.serial as u64;
-            let mut streams = self.streams.lock().unwrap();
             let mut remove_stream = false;
 
-            if let Some(ref mut stream) = streams.get_mut(&req_id) {
+            if let Some(ref mut stream) = self.streams.get_mut(&req_id) {
                 debug!("found stream for request id {}: {:?}", req_id, resp.header);
                 let sender = stream;
                 if resp.payload.len() != 0 {
                     if resp.header.status == request::generated::virNetMessageStatus::VIR_NET_ERROR {
                         debug!("got error from stream, should drop sink");
-                        let mut sinks = self.sinks.lock().unwrap();
-                        sinks.remove(&req_id);
+                        self.sinks.remove(&req_id);
                     }
                     let _ = sender.start_send(resp);
                     let _ = sender.poll_complete();
@@ -296,7 +291,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                 }
             }
             if remove_stream {
-                streams.remove(&req_id);
+                self.streams.remove(&req_id);
             }
         }
     }
@@ -356,31 +351,27 @@ impl<T> Sink for LibvirtTransport<T> where
         if let Some(event_proc) = self.is_event_register(procedure) {
             debug!("Sending event request {:?}/{}", procedure, procedure as u16);
             if let Some(stream) = mem::replace(&mut item.1.stream, None) {
-                let mut events = self.events.lock().unwrap();
-                events.insert(event_proc as u16, stream);
+                self.events.insert(event_proc as u16, stream);
             }
         }
 
         if let Some(stream) = mem::replace(&mut item.1.stream, None) {
             debug!("SENDING REQ ID = {} {:?} WITH STREAM", item.0, item.1.header);
-            let mut streams = self.streams.lock().unwrap();
-            streams.insert(item.0, stream);
+            self.streams.insert(item.0, stream);
         }
 
         let mut new_sink = false;
         if let Some(sink) = mem::replace(&mut item.1.sink, None) {
             debug!("SENDING REQ ID = {} {:?} WITH SINK", item.0, item.1.header);
             {
-                let mut sinks = self.sinks.lock().unwrap();
-                sinks.insert(item.0, (sink, item.1.header.proc_));
+                self.sinks.insert(item.0, (sink, item.1.header.proc_));
                 new_sink = true;
             }
         }
 
         {
-            let sinks = self.sinks.lock().unwrap();
-            debug!("Have {} sinks", sinks.len());
-            if !new_sink && sinks.len() > 0 {
+            debug!("Have {} sinks", self.sinks.len());
+            if !new_sink && self.sinks.len() > 0 {
                 return Ok(AsyncSink::NotReady(item));
             }
         }
@@ -398,8 +389,7 @@ impl<T> Sink for LibvirtTransport<T> where
         }
         loop {
             {
-                let sinks = self.sinks.lock().unwrap();
-                if sinks.len() == 0 {
+                if self.sinks.len() == 0 {
                     break;
                 }
             }
@@ -443,9 +433,9 @@ impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWri
         Ok(LibvirtTransport{ 
             buffer: None,
             inner: framed_delimited(framed, LibvirtCodec),
-            events: Arc::new(Mutex::new(HashMap::new())),
-            streams: Arc::new(Mutex::new(HashMap::new())),
-            sinks: Arc::new(Mutex::new(HashMap::new())),
+            events: HashMap::new(),
+            streams: HashMap::new(),
+            sinks: HashMap::new(),
         })
     }
 }
