@@ -40,7 +40,7 @@ use ::futures::sync::mpsc::{Sender,Receiver};
 use ::proto::{LibvirtProto, LibvirtRequest, LibvirtResponse};
 pub use ::proto::{LibvirtSink, LibvirtStream, EventStream};
 
-type LibvirtFuture<T> = Box<Future<Item = T, Error = LibvirtError>>;
+pub type LibvirtFuture<T> = Box<Future<Item = T, Error = LibvirtError>>;
 
 /// Libvirt client
 #[derive(Clone)]
