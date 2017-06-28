@@ -616,8 +616,8 @@ pub enum DomainEventInfo {
 
 #[derive(Debug)]
 pub struct DomainEvent {
-    domain: Domain,
-    info: DomainEventInfo,
+    pub domain: Domain,
+    pub info: DomainEventInfo,
 }
 
 /* virDomainEventType: http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventType */
