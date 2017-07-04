@@ -396,7 +396,7 @@ pub mod DomainDestroyFlags {
 }
 use generated::remote_domain_destroy_flags_args;
 req!(DomainDestroyRequest: remote_domain_destroy_flags_args {
-    dom: Domain => dom.0,
+    dom: &Domain => dom.0.clone(),
     flags: DomainDestroyFlags::DomainDestroyFlags => flags.bits()
 });
 

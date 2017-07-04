@@ -382,7 +382,7 @@ impl<'a> DomainOperations<'a> {
     }
 
     /// Destroy the domain object. The running instance is shutdown if not down already and all resources used by it are given back to the hypervisor.
-    pub fn destroy(&self, dom: request::Domain, flags: request::DomainDestroyFlags::DomainDestroyFlags) -> LibvirtFuture<()> {
+    pub fn destroy(&self, dom: &request::Domain, flags: request::DomainDestroyFlags::DomainDestroyFlags) -> LibvirtFuture<()> {
         let pl = request::DomainDestroyRequest::new(dom, flags);
         Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DESTROY_FLAGS, pl).map(|_| ()))
     }
