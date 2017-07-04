@@ -34,7 +34,7 @@ pub use self::generated::remote_procedure;
 pub use self::generated::{virNetMessageStatus,virNetMessageHeader,virNetMessageError};
 
 /// VM instance
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Domain(generated::remote_nonnull_domain);
 
 impl Domain {
