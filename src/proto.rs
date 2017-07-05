@@ -179,7 +179,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
             debug!("Processing sink {}", req_id);
             let mut total_len = 0;
             let mut count = 0;
-            'out: for _ in 0..100 {
+            'out: /*for _ in 0..100 */ loop {
                 match sink.poll() {
                     Ok(Async::Ready(Some(buf))) => {
                         let len = buf.len();
@@ -379,7 +379,7 @@ impl<T> Sink for LibvirtTransport<T> where
     }
 
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        use futures::{Async,AsyncSink};
+        use futures::AsyncSink;
         use std::mem;
         debug!("POLL COMPLETE CALLED");
 
