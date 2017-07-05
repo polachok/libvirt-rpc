@@ -385,7 +385,14 @@ impl<T> Sink for LibvirtTransport<T> where
 
         if let Some(req) = mem::replace(&mut self.buffer, None) {
             debug!("Sending buffered msg");
-            assert!(try!(self.inner.start_send(req)).is_ready());
+            match try!(self.inner.start_send(req)) {
+                AsyncSink::NotReady(item) => {
+                    debug!("Inner not ready, putting buffered msg back");
+                    mem::replace(&mut self.buffer, Some(item));
+                    return self.inner.poll_complete();
+                },
+                AsyncSink::Ready => {},
+            }
         }
         loop {
             {
@@ -397,7 +404,7 @@ impl<T> Sink for LibvirtTransport<T> where
                 Ok(AsyncSink::NotReady(pkt)) => {
                     debug!("Sink reports things not ready, saving msg in buffer");
                     mem::replace(&mut self.buffer, Some(pkt));
-                    return Ok(Async::NotReady);
+                    return self.inner.poll_complete();
                 }
                 Err(ref e) if e.kind() == ::std::io::ErrorKind::WouldBlock => {
                     debug!("Sinks empty (would block)");
