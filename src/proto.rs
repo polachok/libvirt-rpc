@@ -379,7 +379,7 @@ impl<T> Sink for LibvirtTransport<T> where
     }
 
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        use futures::AsyncSink;
+        use futures::{Async,AsyncSink};
         use std::mem;
         debug!("POLL COMPLETE CALLED");
 
@@ -394,21 +394,18 @@ impl<T> Sink for LibvirtTransport<T> where
                 AsyncSink::Ready => {},
             }
         }
-        loop {
-            {
-                if self.sinks.len() == 0 {
-                    break;
-                }
-            }
+
+        try_ready!(self.inner.poll_complete());
+
+        if self.sinks.len() > 0 {
             match self.process_sinks() {
                 Ok(AsyncSink::NotReady(pkt)) => {
                     debug!("Sink reports things not ready, saving msg in buffer");
                     mem::replace(&mut self.buffer, Some(pkt));
-                    return self.inner.poll_complete();
+                    return Ok(Async::NotReady);
                 }
                 Err(ref e) if e.kind() == ::std::io::ErrorKind::WouldBlock => {
                     debug!("Sinks empty (would block)");
-                    break;
                 }
                 _ => {},
             }
