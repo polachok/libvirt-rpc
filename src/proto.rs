@@ -179,7 +179,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
             debug!("Processing sink {}", req_id);
             let mut total_len = 0;
             let mut count = 0;
-            'out: /*for _ in 0..100 */ loop {
+            'out: for _ in 0..100 {
                 match sink.poll() {
                     Ok(Async::Ready(Some(buf))) => {
                         let len = buf.len();
@@ -242,7 +242,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
         for id in sinks_to_drop {
             self.sinks.remove(&id);
         }
-        debug!("All sinks empty, returning would block");
+        debug!("All sinks empty (or reached limit), returning would block");
         Err(::std::io::Error::new(::std::io::ErrorKind::WouldBlock, "sinks empty"))
     }
 
@@ -406,6 +406,8 @@ impl<T> Sink for LibvirtTransport<T> where
                 }
                 Err(ref e) if e.kind() == ::std::io::ErrorKind::WouldBlock => {
                     debug!("Sinks empty (would block)");
+                    try_ready!(self.inner.poll_complete());
+                    return Ok(Async::NotReady);
                 }
                 _ => {},
             }
