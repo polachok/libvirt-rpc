@@ -413,7 +413,7 @@ impl<T> Sink for LibvirtTransport<T> where
                 Err(ref e) if e.kind() == ::std::io::ErrorKind::WouldBlock => {
                     debug!("Sinks empty (would block)");
                     /* i'm not sure this is right */
-                    //return Ok(Async::NotReady);
+                    return Ok(Async::Ready(()));
                 }
                 _ => {},
             }
