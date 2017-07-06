@@ -1,6 +1,7 @@
 extern crate xdr_codec;
 extern crate byteorder;
 extern crate uuid;
+#[macro_use]
 extern crate tokio_io;
 extern crate tokio_proto;
 extern crate tokio_service;
