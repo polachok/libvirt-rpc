@@ -171,15 +171,20 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     fn process_sinks(&mut self) -> StartSend<(RequestId, LibvirtRequest), ::std::io::Error> {
         use futures::Async;
         use futures::AsyncSink;
-        let mut sinks_to_drop = Vec::new();
 
         debug!("PROCESSING SINKS: count {}", self.sinks.len());
 
-        for (req_id, &mut (ref mut sink, proc_)) in self.sinks.iter_mut() {
-            debug!("Processing sink {}", req_id);
-            let mut total_len = 0;
-            let mut count = 0;
-            'out: for _ in 0..100 {
+        'out: loop {
+            let mut sinks_to_drop = Vec::new();
+
+            if self.sinks.len() == 0 {
+                break;
+            }
+
+            for (req_id, &mut (ref mut sink, proc_)) in self.sinks.iter_mut() {
+                debug!("Processing sink {}", req_id);
+                let mut total_len = 0;
+                let mut count = 0;
                 match sink.poll() {
                     Ok(Async::Ready(Some(buf))) => {
                         let len = buf.len();
@@ -225,24 +230,27 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                         };
                         debug!("Empty sink, sending empty msg");
                         let _ = self.inner.start_send((*req_id, req));
-                        break 'out;
+                        continue;
                     }
                     Ok(Async::NotReady) => {
-                        debug!("Sink not ready yet");
-                        break 'out;
+                        debug!("Sink {} not ready yet", req_id);
+                        break 'out; /* incorrect: other sink may be ready */
                     },
-                    _ => {
-                        break 'out;
+                    Err(e) => {
+                        error!("Error in sink {}: {:?}", req_id, e);
+                        continue;
                     },
                 }
+                debug!("Sink {} processed {} of payload ({} messages)", req_id, total_len, count);
             }
-            debug!("Sink {} processed {} of payload ({} messages)", req_id, total_len, count);
+            for id in sinks_to_drop {
+                debug!("Dropping sink {}", id);
+                self.sinks.remove(&id);
+            }
         }
 
-        for id in sinks_to_drop {
-            self.sinks.remove(&id);
-        }
-        debug!("All sinks empty (or reached limit), returning would block");
+        /* expected to be unreachable */
+        debug!("All sinks empty, returning would block");
         Err(::std::io::Error::new(::std::io::ErrorKind::WouldBlock, "sinks empty"))
     }
 
@@ -395,19 +403,17 @@ impl<T> Sink for LibvirtTransport<T> where
             }
         }
 
-        try_ready!(self.inner.poll_complete());
-
         if self.sinks.len() > 0 {
             match self.process_sinks() {
                 Ok(AsyncSink::NotReady(pkt)) => {
-                    debug!("Sink reports things not ready, saving msg in buffer");
+                    debug!("Sink reports inner not ready, saving msg in buffer");
                     mem::replace(&mut self.buffer, Some(pkt));
-                    return Ok(Async::NotReady);
+                    /* we expect to be called soon again */
                 }
                 Err(ref e) if e.kind() == ::std::io::ErrorKind::WouldBlock => {
                     debug!("Sinks empty (would block)");
-                    try_ready!(self.inner.poll_complete());
-                    return Ok(Async::NotReady);
+                    /* i'm not sure this is right */
+                    //return Ok(Async::NotReady);
                 }
                 _ => {},
             }
