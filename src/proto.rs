@@ -144,7 +144,7 @@ pub struct LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     /* req.id -> stream */
     streams: HashMap<u64, ::futures::sync::mpsc::Sender<LibvirtResponse>>,
     /* req.id -> (stream, procedure) */
-    sinks: HashMap<u64, (::futures::sync::mpsc::Receiver<BytesMut>, i32)>,
+    sinks: HashMap<u64, (::futures::sync::mpsc::Receiver<BytesMut>, i32, bool)>,
 }
 
 impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
@@ -171,10 +171,11 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
 
     fn poll_sinks(&mut self) -> Poll<Option<(RequestId, LibvirtRequest)>, <LibvirtSink as Sink>::SinkError> {
         use futures::Async;
-        let mut sinks_to_drop = Vec::new();
         let mut result = Ok(Async::NotReady);
 
-        for (req_id, &mut (ref mut sink, proc_)) in self.sinks.iter_mut() {
+        debug!("POLL SINKS");
+        for (req_id, &mut (ref mut sink, proc_, ref mut complete)) in self.sinks.iter_mut() {
+            debug!("Processing sink {} proc: {} complete: {}", req_id, proc_, complete);
             match sink.poll() {
                 Ok(Async::Ready(Some(buf))) => {
                     let req = LibvirtRequest {
@@ -192,6 +193,10 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                 }
 
                 Ok(Async::Ready(None)) => {
+                    if *complete {
+                        /* skip completed sinks */
+                        continue;
+                    }
                     let req = LibvirtRequest {
                         stream: None,
                         sink: None,
@@ -204,7 +209,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                         payload: BytesMut::new(),
                     };
                     debug!("Empty sink {}, sending empty msg", req_id);
-                    sinks_to_drop.push(*req_id);
+                    *complete = true;
                     result = Ok(Async::Ready(Some((*req_id, req))));
                     break;
                 }
@@ -219,98 +224,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
             }
         }
 
-        for id in sinks_to_drop {
-            debug!("Dropping sink {}", id);
-            self.sinks.remove(&id);
-        }
-
         result
-    }
-
-    fn process_sinks(&mut self) -> StartSend<(RequestId, LibvirtRequest), ::std::io::Error> {
-        use futures::Async;
-        use futures::AsyncSink;
-
-        debug!("PROCESSING SINKS: count {}", self.sinks.len());
-
-        'out: loop {
-            let mut sinks_to_drop = Vec::new();
-
-            if self.sinks.len() == 0 {
-                break;
-            }
-
-            for (req_id, &mut (ref mut sink, proc_)) in self.sinks.iter_mut() {
-                debug!("Processing sink {}", req_id);
-                let mut total_len = 0;
-                let mut count = 0;
-                match sink.poll() {
-                    Ok(Async::Ready(Some(buf))) => {
-                        let len = buf.len();
-                        let req = LibvirtRequest {
-                            stream: None,
-                            sink: None,
-                            header: request::virNetMessageHeader {
-                                type_: ::request::generated::virNetMessageType::VIR_NET_STREAM,
-                                status: request::virNetMessageStatus::VIR_NET_CONTINUE,
-                                proc_: proc_,
-                                ..Default::default()
-                            },
-                            payload: buf,
-                        };
-                        debug!("Sink sending {:?}", req.header);
-                        match self.inner.start_send((*req_id, req)) {
-                            Ok(AsyncSink::NotReady(item)) => {
-                                debug!("Inner not ready, sink {} processed {} of payload ({} messages) so far", req_id, total_len, count);
-                                return Ok(AsyncSink::NotReady(item));
-                            },
-                            Ok(AsyncSink::Ready) => {
-                                debug!("Sink sent");
-                                count += 1;
-                                total_len += len;
-                            },
-                            Err(e) => {
-                                return Err(e);
-                            }
-                        }
-                    },
-                    Ok(Async::Ready(None)) => {
-                        sinks_to_drop.push(*req_id);
-                        let req = LibvirtRequest {
-                            stream: None,
-                            sink: None,
-                            header: request::virNetMessageHeader {
-                                type_: ::request::generated::virNetMessageType::VIR_NET_STREAM,
-                                status: request::virNetMessageStatus::VIR_NET_OK,
-                                proc_: proc_,
-                                ..Default::default()
-                            },
-                            payload: BytesMut::new(),
-                        };
-                        debug!("Empty sink, sending empty msg");
-                        let _ = self.inner.start_send((*req_id, req));
-                        continue;
-                    }
-                    Ok(Async::NotReady) => {
-                        debug!("Sink {} not ready yet", req_id);
-                        break 'out; /* incorrect: other sink may be ready */
-                    },
-                    Err(e) => {
-                        error!("Error in sink {}: {:?}", req_id, e);
-                        continue;
-                    },
-                }
-                debug!("Sink {} processed {} of payload ({} messages)", req_id, total_len, count);
-            }
-            for id in sinks_to_drop {
-                debug!("Dropping sink {}", id);
-                self.sinks.remove(&id);
-            }
-        }
-
-        /* expected to be unreachable */
-        debug!("All sinks empty, returning would block");
-        Err(::std::io::Error::new(::std::io::ErrorKind::WouldBlock, "sinks empty"))
     }
 
     fn process_event(&mut self, resp: LibvirtResponse) {
@@ -344,6 +258,10 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                     let _ = sender.poll_complete();
                 } else {
                     debug!("closing stream {}", req_id);
+
+                    debug!("got something from stream, should drop sink!");
+                    self.sinks.remove(&req_id);
+
                     let _ = sender.start_send(resp);
                     let _ = sender.close();
                     let _ = sender.poll_complete();
@@ -423,16 +341,6 @@ impl<T> Sink for LibvirtTransport<T> where
             debug!("Found something in sink_buffer: NOT READY");
             return Ok(AsyncSink::NotReady(item));
         }
-        /*
-        match self.poll_sinks() {
-            Ok(Async::Ready(Some(msg))) => {
-                debug!("SEND: some sinks are ready, returning not ready");
-                mem::replace(&mut self.sink_buffer, Some(msg));
-                return Ok(AsyncSink::NotReady(item));
-            }
-            _ => {}
-        }
-        */
 
         let procedure = unsafe { ::std::mem::transmute(item.1.header.proc_ as u16) };
         if let Some(event_proc) = self.is_event_register(procedure) {
@@ -451,7 +359,7 @@ impl<T> Sink for LibvirtTransport<T> where
         if let Some(sink) = mem::replace(&mut item.1.sink, None) {
             debug!("SENDING REQ ID = {} {:?} WITH SINK", item.0, item.1.header);
             {
-                self.sinks.insert(item.0, (sink, item.1.header.proc_));
+                self.sinks.insert(item.0, (sink, item.1.header.proc_, false));
                 new_sink = true;
             }
         }
@@ -484,28 +392,12 @@ impl<T> Sink for LibvirtTransport<T> where
             }
         }
 
-        /*
-        if let Some(req) = mem::replace(&mut self.sink_buffer, None) {
-            debug!("Sending buffered sink msg: {} {:?} pl: {}", req.0, req.1.header, req.1.payload.len());
-            match try!(self.inner.start_send(req)) {
-                AsyncSink::NotReady(item) => {
-                    debug!("Inner not ready, putting buffered sink msg back");
-                    mem::replace(&mut self.sink_buffer, Some(item));
-                    return self.inner.poll_complete();
-                },
-                AsyncSink::Ready => {
-                    debug!("Sent buffered sink msg");
-                },
-            }
-        }
-        */
-
         loop {
             match self.poll_sinks() {
                 Ok(Async::Ready(Some(req))) => {
                     debug!("SEND: some sinks are ready, try processing");
 
-                    debug!("Sending buffered sink msg: {} {:?} pl: {}", req.0, req.1.header, req.1.payload.len());
+                    debug!("Sending sink msg: {} {:?} pl: {}", req.0, req.1.header, req.1.payload.len());
                     match try!(self.inner.start_send(req)) {
                         AsyncSink::NotReady(item) => {
                             debug!("Inner not ready, putting sink msg back");
@@ -524,23 +416,6 @@ impl<T> Sink for LibvirtTransport<T> where
             }
         }
 
-        /*
-        if self.sinks.len() > 0 {
-            match self.process_sinks() {
-                Ok(AsyncSink::NotReady(pkt)) => {
-                    debug!("Sink reports inner not ready, saving msg in buffer");
-                    mem::replace(&mut self.buffer, Some(pkt));
-                    /* we expect to be called soon again */
-                }
-                Err(ref e) if e.kind() == ::std::io::ErrorKind::WouldBlock => {
-                    debug!("Sinks empty (would block)");
-                    /* i'm not sure this is right */
-                    //return Ok(Async::Ready(()));
-                }
-                _ => {},
-            }
-        }
-        */
         self.inner.poll_complete()
     }
 
