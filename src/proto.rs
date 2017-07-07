@@ -333,12 +333,14 @@ impl<T> Sink for LibvirtTransport<T> where
 
     fn start_send(&mut self, mut item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
         use ::std::mem;
-        use futures::{Async,AsyncSink};
+        use futures::{AsyncSink};
 
+        /*
         if self.buffer.is_some() {
             debug!("Found something in sink_buffer: NOT READY");
             return Ok(AsyncSink::NotReady(item));
         }
+        */
 
         let procedure = unsafe { ::std::mem::transmute(item.1.header.proc_ as u16) };
         if let Some(event_proc) = self.is_event_register(procedure) {
