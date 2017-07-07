@@ -137,7 +137,6 @@ impl<T, C> Sink for FramedTransport<T, C> where
 pub struct LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     /* store here if underlying transport is not ready */
     buffer: Option<(RequestId, LibvirtRequest)>,
-    sink_buffer: Option<(RequestId, LibvirtRequest)>,
     inner: FramedTransport<T, LibvirtCodec>,
     /* procedure -> event stream */
     events: HashMap<u16, ::futures::sync::mpsc::Sender<LibvirtResponse>>,
@@ -291,7 +290,6 @@ impl<T> Stream for LibvirtTransport<T> where
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         use futures::Async;
-        use ::std::mem;
 
         debug!("POLL CALLED");
 
@@ -337,7 +335,7 @@ impl<T> Sink for LibvirtTransport<T> where
         use ::std::mem;
         use futures::{Async,AsyncSink};
 
-        if self.sink_buffer.is_some() || self.buffer.is_some() {
+        if self.buffer.is_some() {
             debug!("Found something in sink_buffer: NOT READY");
             return Ok(AsyncSink::NotReady(item));
         }
@@ -442,7 +440,6 @@ impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWri
                         .new_framed(io);
         Ok(LibvirtTransport{ 
             buffer: None,
-            sink_buffer: None,
             inner: framed_delimited(framed, LibvirtCodec),
             events: HashMap::new(),
             streams: HashMap::new(),
