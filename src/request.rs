@@ -984,7 +984,6 @@ impl Into<Option<String>> for DomainScreenshotResponse {
     fn into(self) -> Option<String> {
         self.0.mime.map(|s| s.0)
     }
-
 }
 
 use generated::remote_storage_vol_download_args;
@@ -1031,6 +1030,36 @@ req!(DomainDetachDeviceRequest: remote_domain_detach_device_flags_args {
 });
 resp!(DomainDetachDeviceResponse);
 rpc!(DomainDetachDeviceRequest => DomainDetachDeviceResponse);
+
+use generated::remote_domain_get_xml_desc_args;
+req!(DomainGetXmlDescRequest: remote_domain_get_xml_desc_args {
+    dom: &Domain => dom.0.clone(),
+    flags: DomainXmlFlags::DomainXmlFlags => flags.bits()
+});
+resp!(DomainGetXmlDescResponse: generated::remote_domain_get_xml_desc_ret);
+rpc!(DomainGetXmlDescRequest => DomainGetXmlDescResponse);
+
+impl Into<String> for DomainGetXmlDescResponse {
+    fn into(self) -> String {
+        (self.0).xml.0
+    }
+}
+
+#[allow(non_snake_case)]
+pub mod DomainXmlFlags {
+    bitflags! {
+        pub flags DomainXmlFlags: u32 {
+            /// dump security sensitive information too
+            const SECURE	= 1,
+            /// dump inactive domain information
+            const INACTIVE	=	2,
+            /// update guest CPU requirements according to host CPU
+            const UPDATE_CPU	=	4,
+            /// dump XML suitable for migration
+            const MIGRATABLE	=	8,
+        }
+    }
+}
 
 #[allow(non_snake_case)]
 pub mod DomainModificationImpact {

@@ -498,6 +498,18 @@ impl<'a> DomainOperations<'a> {
         let pl = request::DomainDetachDeviceRequest::new(dom, xml, flags);
         Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DETACH_DEVICE_FLAGS, pl).map(|resp| resp.into()))
     }
+
+    /// Provide an XML description of the domain. The description may be reused later to relaunch the domain with virDomainCreateXML().
+    /// No security-sensitive data will be included unless @flags contains VIR_DOMAIN_XML_SECURE;
+    /// this flag is rejected on read-only connections. If @flags includes VIR_DOMAIN_XML_INACTIVE,
+    /// then the XML represents the configuration that will be used on the next boot of a persistent domain;
+    /// otherwise, the configuration represents the currently running domain.
+    /// If @flags contains VIR_DOMAIN_XML_UPDATE_CPU, then the portion of the domain XML describing CPU capabilities
+    /// is modified to match actual capabilities of the host.
+    pub fn get_xml(&self, dom: &request::Domain, flags: request::DomainXmlFlags::DomainXmlFlags) -> LibvirtFuture<String> {
+        let pl = request::DomainGetXmlDescRequest::new(dom, flags);
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_GET_XML_DESC, pl).map(|resp| resp.into()))
+    }
 }
 
 impl Service for Client {
