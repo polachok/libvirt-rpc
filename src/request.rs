@@ -1014,6 +1014,40 @@ req!(DomainGetInfoRequest: remote_domain_get_info_args {
 resp!(DomainGetInfoResponse: generated::remote_domain_get_info_ret);
 rpc!(DomainGetInfoRequest => DomainGetInfoResponse);
 
+use generated::remote_domain_attach_device_flags_args;
+req!(DomainAttachDeviceRequest: remote_domain_attach_device_flags_args {
+    dom: &Domain => dom.0.clone(),
+    xml: &str => generated::remote_nonnull_string(xml.to_owned()),
+    flags: DomainModificationImpact::DomainModificationImpact => flags.bits()
+});
+resp!(DomainAttachDeviceResponse);
+rpc!(DomainAttachDeviceRequest => DomainAttachDeviceResponse);
+
+use generated::remote_domain_detach_device_flags_args;
+req!(DomainDetachDeviceRequest: remote_domain_detach_device_flags_args {
+    dom: &Domain => dom.0.clone(),
+    xml: &str => generated::remote_nonnull_string(xml.to_owned()),
+    flags: DomainModificationImpact::DomainModificationImpact => flags.bits()
+});
+resp!(DomainDetachDeviceResponse);
+rpc!(DomainDetachDeviceRequest => DomainDetachDeviceResponse);
+
+#[allow(non_snake_case)]
+pub mod DomainModificationImpact {
+    bitflags! {
+        pub flags DomainModificationImpact: u32 {
+            /// Affect current domain state.
+            const AFFECT_CURRENT = 0,
+
+            /// Affect running domain state.
+            const AFFECT_LIVE = 1,
+
+            /// Affect persistent domain state.
+            const AFFECT_CONFIG = 2,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct DomainInfo(DomainGetInfoResponse);
 
