@@ -349,6 +349,7 @@ impl<'a> DomainOperations<'a> {
         let payload = request::DomainGetInfoRequest::new(dom);
         Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_GET_INFO, payload).map(|resp| resp.into()))
     }
+
     /// Collect a possibly-filtered list of all domains, and return an allocated array of information for each. 
     pub fn list(&self, flags: request::ListAllDomainsFlags::ListAllDomainsFlags) -> LibvirtFuture<Vec<request::Domain>> {
         let payload = request::ListAllDomainsRequest::new(flags);
@@ -447,6 +448,55 @@ impl<'a> DomainOperations<'a> {
         Box::new(self.client.request_stream(request::remote_procedure::REMOTE_PROC_DOMAIN_SCREENSHOT, pl, Some(sender)).map(move |resp|{
             (resp.into(), LibvirtStream::from(receiver))
         }))
+    }
+
+
+    /// Attach a virtual device to a domain, using the flags parameter to control how the device is attached.
+    /// VIR_DOMAIN_AFFECT_CURRENT specifies that the device allocation is made based on current domain state.
+    /// VIR_DOMAIN_AFFECT_LIVE specifies that the device shall be allocated to the active domain instance only and is not added
+    /// to the persisted domain configuration.
+    ///
+    /// VIR_DOMAIN_AFFECT_CONFIG specifies that the device shall be allocated to the persisted domain configuration only.
+    /// Note that the target hypervisor must return an error if unable to satisfy flags.
+    /// E.g. the hypervisor driver will return failure if LIVE is specified but it only supports modifying the persisted device allocation.
+    /// For compatibility, this method can also be used to change the media in an existing CDROM/Floppy device, however,
+    /// applications are recommended to use the virDomainUpdateDeviceFlag method instead.
+    ///
+    /// Be aware that hotplug changes might not persist across a domain going into S4 state (also known as hibernation)
+    /// unless you also modify the persistent domain definition.
+    pub fn attach_device(&self, dom: &request::Domain, xml: &str, flags: request::DomainModificationImpact::DomainModificationImpact) -> LibvirtFuture<()> {
+        let pl = request::DomainAttachDeviceRequest::new(dom, xml, flags);
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_ATTACH_DEVICE_FLAGS, pl).map(|resp| resp.into()))
+    }
+
+    /// Detach a virtual device from a domain, using the flags parameter to control how the device is detached.
+    /// VIR_DOMAIN_AFFECT_CURRENT specifies that the device allocation is removed based on current domain state.
+    /// VIR_DOMAIN_AFFECT_LIVE specifies that the device shall be deallocated from the active domain instance only
+    /// and is not from the persisted domain configuration.
+    /// VIR_DOMAIN_AFFECT_CONFIG specifies that the device shall be deallocated from the persisted domain configuration only.
+    /// Note that the target hypervisor must return an error if unable to satisfy flags.
+    /// E.g. the hypervisor driver will return failure if LIVE is specified but it only supports removing the persisted device allocation.
+    /// Some hypervisors may prevent this operation if there is a current block copy operation on the device being detached;
+    /// in that case, use virDomainBlockJobAbort() to stop the block copy first.
+    /// Beware that depending on the hypervisor and device type, detaching a device from a running domain may be asynchronous.
+    /// That is, calling virDomainDetachDeviceFlags may just request device removal while the device is actually removed later
+    /// (in cooperation with a guest OS). Previously, this fact was ignored and the device could have been removed from domain
+    /// configuration before it was actually removed by the hypervisor causing various failures on subsequent operations.
+    /// To check whether the device was successfully removed, either recheck domain configuration using virDomainGetXMLDesc()
+    /// or add a handler for the VIR_DOMAIN_EVENT_ID_DEVICE_REMOVED event. In case the device is already gone when virDomainDetachDeviceFlags
+    /// returns, the event is delivered before this API call ends. To help existing clients work better in most cases,
+    /// this API will try to transform an asynchronous device removal that finishes shortly after the request into a synchronous removal.
+    /// In other words, this API may wait a bit for the removal to complete in case it was not synchronous.
+    ///
+    /// Be aware that hotplug changes might not persist across a domain going into S4 state (also known as hibernation) unless you
+    /// also modify the persistent domain definition.
+    ///
+    /// The supplied XML description of the device should be as specific as its definition in the domain XML.
+    /// The set of attributes used to match the device are internal to the drivers. Using a partial definition, or attempting to detach
+    /// a device that is not present in the domain XML, but shares some specific attributes with one that is present, may lead to unexpected results.
+    pub fn detach_device(&self, dom: &request::Domain, xml: &str, flags: request::DomainModificationImpact::DomainModificationImpact) -> LibvirtFuture<()> {
+        let pl = request::DomainDetachDeviceRequest::new(dom, xml, flags);
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DETACH_DEVICE_FLAGS, pl).map(|resp| resp.into()))
     }
 }
 
