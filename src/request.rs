@@ -611,6 +611,10 @@ pub enum EventPmSuspendedDetailType {
     Disk = 1,
 }
 
+pub trait DomainEvent where Self: Sized {
+    type From: Into<Self> + ::xdr_codec::Unpack<::std::io::Cursor<::bytes::BytesMut>>;
+}
+
 #[derive(Debug)]
 pub enum DomainEventInfo {
     Defined(EventDefinedDetailType),
@@ -626,7 +630,7 @@ pub enum DomainEventInfo {
 }
 
 #[derive(Debug)]
-pub struct DomainEvent {
+pub struct DomainLifecycleEvent {
     pub domain: Domain,
     pub info: DomainEventInfo,
 }
@@ -642,7 +646,11 @@ const VIR_DOMAIN_EVENT_SHUTDOWN: i32	=	6;
 const VIR_DOMAIN_EVENT_PMSUSPENDED: i32	=	7;
 const VIR_DOMAIN_EVENT_CRASHED: i32	=	8;
 
-impl From<generated::remote_domain_event_callback_lifecycle_msg> for DomainEvent {
+impl DomainEvent for DomainLifecycleEvent {
+    type From = generated::remote_domain_event_callback_lifecycle_msg;
+}
+
+impl From<generated::remote_domain_event_callback_lifecycle_msg> for DomainLifecycleEvent {
     fn from(ev: generated::remote_domain_event_callback_lifecycle_msg) -> Self {
         use ::std::mem;
         let info = match ev.msg.event {
@@ -687,7 +695,65 @@ impl From<generated::remote_domain_event_callback_lifecycle_msg> for DomainEvent
             }
         };
         let domain = Domain(ev.msg.dom);
-        DomainEvent { domain, info }
+        DomainLifecycleEvent { domain, info }
+    }
+}
+
+#[derive(Debug)]
+pub struct DomainRebootEvent {
+    pub domain: Domain,
+}
+
+impl DomainEvent for DomainRebootEvent {
+    type From = generated::remote_domain_event_callback_reboot_msg;
+}
+
+impl From<generated::remote_domain_event_callback_reboot_msg> for DomainRebootEvent {
+    fn from(ev: generated::remote_domain_event_callback_reboot_msg) -> Self {
+        let domain = Domain(ev.msg.dom);
+        DomainRebootEvent { domain }
+    }
+}
+
+// http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventID
+#[derive(Debug,Copy,Clone)]
+pub enum DomainEventId {
+    Lifecycle,
+    Reboot,
+    RtcChange,
+    Watchdog,
+    IoError,
+    Graphics,
+    IoErrorReason,
+    ControlError,
+    BlockJob,
+    DiskChange,
+    TrayChange,
+    PmWakeup,
+    PmSuspend,
+    BalloonChange,
+    PmSuspendDisk,
+    DeviceRemoved,
+    BlockJob2,
+    Tunable,
+    AgentLifecycle,
+    DeviceAdded,
+    MigrationIteration,
+    JobCompleted,
+    DeviceRemovalFailed,
+    MetadataChanged,
+    BlockThreshold,
+}
+
+impl DomainEventId {
+    pub fn get_method(&self) -> remote_procedure {
+        use self::DomainEventId::*;
+        use remote_procedure::*;
+        match *self {
+            Lifecycle => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE,
+            Reboot => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_REBOOT,
+            _ => unimplemented!(), /* sorry */
+        }
     }
 }
 
