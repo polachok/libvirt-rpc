@@ -586,14 +586,4 @@ mod tests {
     fn test_version() {
         run_connected(|client| client.version())
     }
-
-    #[test]
-    fn test_reboot_event() {
-        run_connected(|client| client.domain().register_event(None, 1).and_then(move |stream| {
-            stream.for_each(move |ev| {
-                println!("{:?}", ev);
-                Ok(())
-            })
-        }))
-    }
 }
