@@ -9,7 +9,6 @@ use ::tokio_proto::multiplex::{self, RequestId};
 use ::request;
 use ::futures::{Stream, Sink, Poll, StartSend};
 use ::futures::sync::mpsc::{Sender,Receiver};
-use std::marker::PhantomData;
 
 struct LibvirtCodec;
 
@@ -17,6 +16,7 @@ struct LibvirtCodec;
 pub struct LibvirtRequest {
     pub stream: Option<Sender<LibvirtResponse>>,
     pub sink: Option<Receiver<BytesMut>>,
+    pub event: Option<request::remote_procedure>,
     pub header: request::virNetMessageHeader,
     pub payload: BytesMut,
 }
@@ -147,18 +147,12 @@ pub struct LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
 }
 
 impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
-    fn is_event_register(&self, procedure: request::generated::remote_procedure) -> Option<request::generated::remote_procedure> {
-        match procedure {
-            request::remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_CALLBACK_REGISTER_ANY => {
-                Some(request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE)
-            },
-            _ => None,
-        }
-    }
-
     fn is_event(&self, procedure: request::generated::remote_procedure) -> bool {
         match procedure {
             request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE => {
+                true
+            },
+            request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_REBOOT => {
                 true
             },
             _ => {
@@ -180,6 +174,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                     let req = LibvirtRequest {
                                 stream: None,
                                 sink: None,
+                                event: None,
                                 header: request::virNetMessageHeader {
                                     type_: ::request::generated::virNetMessageType::VIR_NET_STREAM,
                                     status: request::virNetMessageStatus::VIR_NET_CONTINUE,
@@ -199,6 +194,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                     let req = LibvirtRequest {
                         stream: None,
                         sink: None,
+                        event: None,
                         header: request::virNetMessageHeader {
                             type_: ::request::generated::virNetMessageType::VIR_NET_STREAM,
                             status: request::virNetMessageStatus::VIR_NET_OK,
@@ -342,9 +338,8 @@ impl<T> Sink for LibvirtTransport<T> where
         }
         */
 
-        let procedure = unsafe { ::std::mem::transmute(item.1.header.proc_ as u16) };
-        if let Some(event_proc) = self.is_event_register(procedure) {
-            debug!("Sending event request {:?}/{}", procedure, procedure as u16);
+        if let Some(event_proc) = mem::replace(&mut item.1.event, None) {
+            debug!("Sending event request {:?}", event_proc);
             if let Some(stream) = mem::replace(&mut item.1.stream, None) {
                 self.events.insert(event_proc as u16, stream);
             }
@@ -450,41 +445,34 @@ impl<T> multiplex::ClientProto<T> for LibvirtProto where T: AsyncRead + AsyncWri
     }
 }
 
-pub struct EventStream<T> {
-    pub inner: ::futures::sync::mpsc::Receiver<LibvirtResponse>,
-    _phantom: PhantomData<T>,
+pub struct EventStream<E> where E: request::DomainEvent {
+    inner: ::futures::sync::mpsc::Receiver<LibvirtResponse>,
+    handle_resp: fn(LibvirtResponse) -> Result<<E as request::DomainEvent>::From, ::LibvirtError>,
 }
 
-impl<T> From<::futures::sync::mpsc::Receiver<LibvirtResponse>> for EventStream<T> {
-    fn from(r: ::futures::sync::mpsc::Receiver<LibvirtResponse>) -> Self {
-        EventStream {
-            inner: r, 
-            _phantom: PhantomData,
-        }
+impl<E> EventStream<E> where E: request::DomainEvent {
+    pub fn new(inner: ::futures::sync::mpsc::Receiver<LibvirtResponse>,
+           handler: fn(LibvirtResponse) -> Result<<E as request::DomainEvent>::From, ::LibvirtError>) -> Self {
+               EventStream { inner: inner, handle_resp: handler }
     }
+
 }
 
-impl<U: From<request::generated::remote_domain_event_callback_lifecycle_msg> + ::std::fmt::Debug> Stream for EventStream<U> {
-    type Item = U;
+impl<E> Stream for EventStream<E> where E: ::std::fmt::Debug + request::DomainEvent {
+    type Item = E;
     type Error = ::LibvirtError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         use futures::Async;
         match self.inner.poll() {
             Ok(Async::Ready(Some(resp))) => {
-                let procedure = unsafe { ::std::mem::transmute(resp.header.proc_ as u16) };
-                match procedure {
-                    request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE => {
-                        let mut cursor = Cursor::new(resp.payload);
-                        let (msg, _) = request::generated::remote_domain_event_callback_lifecycle_msg::unpack(&mut cursor).unwrap();
+                match (self.handle_resp)(resp) {
+                    Ok(msg) => {
                         let msg = msg.into();
-                        debug!("LIFECYCLE EVENT (CALLBACK) {:?} {:?}", resp.header, msg);
+                        debug!("EVENT (CALLBACK) {:?}", msg);
                         Ok(Async::Ready(Some(msg)))
                     },
-                    _ => {
-                        error!("UNKNOWN EVENT RECEIVED {:?}", procedure);
-                        Ok(Async::NotReady)
-                    },
+                    Err(e) => return Err(e),
                 }
             },
             Ok(Async::Ready(None)) => Ok(Async::Ready(None)),

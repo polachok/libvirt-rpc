@@ -60,7 +60,10 @@ impl Client {
     }
 
     fn pack<P: Pack<::bytes::Writer<::bytes::BytesMut>>>(procedure: request::remote_procedure,
-                     payload: P, stream: Option<Sender<LibvirtResponse>>, sink: Option<Receiver<BytesMut>>) -> Result<LibvirtRequest, ::xdr_codec::Error> {
+                      payload: P,
+                      stream: Option<Sender<LibvirtResponse>>,
+                      sink: Option<Receiver<BytesMut>>,
+                      event: Option<request::remote_procedure>) -> Result<LibvirtRequest, ::xdr_codec::Error> {
         let buf = BytesMut::with_capacity(4096);
         let buf = {
             let mut writer = buf.writer();
@@ -70,6 +73,7 @@ impl Client {
         let req = LibvirtRequest {
             stream: stream,
             sink: sink,
+            event: event,
             header: request::virNetMessageHeader {
                 proc_: procedure as i32,
                 ..Default::default()
@@ -95,15 +99,15 @@ impl Client {
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
     {
-        self.request_stream(procedure, payload, None)
+        self.request_stream(procedure, payload, None, None)
     }
 
-    fn request_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<Sender<LibvirtResponse>>) ->
+    fn request_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<Sender<LibvirtResponse>>, event: Option<request::remote_procedure>) ->
      Box<Future<Item = <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, Error = LibvirtError>>
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
     {
-        self.request_sink_stream(procedure, payload, stream, None)
+        self.request_sink_stream(procedure, payload, stream, None, event)
     }
 
     fn request_sink<P>(&self, procedure: request::remote_procedure, payload: P, sink: Option<Receiver<BytesMut>>) ->
@@ -111,15 +115,19 @@ impl Client {
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
     {
-        self.request_sink_stream(procedure, payload, None, sink)
+        self.request_sink_stream(procedure, payload, None, sink, None)
     }
 
-    fn request_sink_stream<P>(&self, procedure: request::remote_procedure, payload: P, stream: Option<Sender<LibvirtResponse>>, sink: Option<Receiver<BytesMut>>) ->
+    fn request_sink_stream<P>(&self, procedure: request::remote_procedure,
+                                     payload: P,
+                                     stream: Option<Sender<LibvirtResponse>>,
+                                     sink: Option<Receiver<BytesMut>>,
+                                     event: Option<request::remote_procedure>) ->
      Box<Future<Item = <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response, Error = LibvirtError>>
         where P: Pack<::bytes::Writer<::bytes::BytesMut>> + request::LibvirtRpc<Cursor<::bytes::BytesMut>>,
         <P as request::LibvirtRpc<Cursor<::bytes::BytesMut>>>::Response: 'static
      {
-        let req = Self::pack(procedure, payload, stream, sink);
+        let req = Self::pack(procedure, payload, stream, sink, event);
         match req {
             Err(e) => {
                 Box::new(future::err(e.into()))
@@ -232,7 +240,7 @@ impl<'a> VolumeOperations<'a> {
         let pl = request::StorageVolDownloadRequest::new(vol, offset, length, 0);
         let (sender, receiver) = ::futures::sync::mpsc::channel(0);
 
-        Box::new(self.client.request_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DOWNLOAD, pl, Some(sender)).map(move |_| {
+        Box::new(self.client.request_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_DOWNLOAD, pl, Some(sender), None).map(move |_| {
             LibvirtStream::from(receiver)
         }))
     }
@@ -267,7 +275,7 @@ impl<'a> VolumeOperations<'a> {
         let (sink_sender, sink_receiver) = ::futures::sync::mpsc::channel(64);
         let (stream_sender, stream_receiver) = ::futures::sync::mpsc::channel(64);
  
-        Box::new(self.client.request_sink_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(stream_sender), Some(sink_receiver))
+        Box::new(self.client.request_sink_stream(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, pl, Some(stream_sender), Some(sink_receiver), None)
                    .map_err(|e| e.into())
                    .and_then(move |_| uploader(LibvirtSink { inner: sink_sender }).into_future())
                    .and_then(|_| stream_receiver.into_future().map_err(|e| panic!("Unexpected error in mpsc receiver: {:?}", e)))
@@ -362,17 +370,26 @@ impl<'a> DomainOperations<'a> {
         Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_LOOKUP_BY_UUID, pl).map(|resp| resp.domain()))
     }
 
-    pub fn register_event(&self, dom: Option<&request::Domain>, event: i32) -> LibvirtFuture<EventStream<::request::DomainEvent>> {
-        let pl = request::DomainEventCallbackRegisterAnyRequest::new(event, dom);
+    fn register_event<T: request::DomainEvent>(&self, dom: Option<&request::Domain>, event: request::DomainEventId) -> LibvirtFuture<EventStream<T>> {
+        let pl = request::DomainEventCallbackRegisterAnyRequest::new(event as i32, dom);
         let (sender, receiver) = ::futures::sync::mpsc::channel(1024);
-        Box::new(self.client.request_stream(request::remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_CALLBACK_REGISTER_ANY, pl, Some(sender))
+        let event_procedure = event.get_method();
+        Box::new(self.client.request_stream(request::remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_CALLBACK_REGISTER_ANY, pl, Some(sender), Some(event_procedure))
             .map(move |resp| {
                 let id = resp.callback_id();
                 debug!("REGISTERED CALLBACK ID {}", id);
                 {
-                    EventStream::from(receiver)
+                    EventStream::new(receiver, Client::handle_response)
                 }
             }))
+    }
+
+    pub fn register_lifecycle_event(&self, dom: Option<&request::Domain>) -> LibvirtFuture<EventStream<request::DomainLifecycleEvent>> {
+        self.register_event(dom, request::DomainEventId::Lifecycle)
+    }
+
+    pub fn register_reboot_event(&self, dom: Option<&request::Domain>) -> LibvirtFuture<EventStream<request::DomainRebootEvent>> {
+        self.register_event(dom, request::DomainEventId::Reboot)
     }
     /* TODO implement unregister */
 
@@ -445,7 +462,7 @@ impl<'a> DomainOperations<'a> {
         let pl = request::DomainScreenshotRequest::new(dom, screen, 0);
         let (sender, receiver) = ::futures::sync::mpsc::channel(0);
 
-        Box::new(self.client.request_stream(request::remote_procedure::REMOTE_PROC_DOMAIN_SCREENSHOT, pl, Some(sender)).map(move |resp|{
+        Box::new(self.client.request_stream(request::remote_procedure::REMOTE_PROC_DOMAIN_SCREENSHOT, pl, Some(sender), None).map(move |resp|{
             (resp.into(), LibvirtStream::from(receiver))
         }))
     }
@@ -540,7 +557,7 @@ mod tests {
     use std::fmt::Debug;
     use ::tokio_core::reactor::Core;
     use ::async::Client;
-    use futures::{Future,IntoFuture};
+    use futures::{Future,IntoFuture,Stream};
 
     fn connect() -> (Client, Core) {
         let core = Core::new().unwrap();
@@ -568,5 +585,15 @@ mod tests {
     #[test]
     fn test_version() {
         run_connected(|client| client.version())
+    }
+
+    #[test]
+    fn test_reboot_event() {
+        run_connected(|client| client.domain().register_event(None, 1).and_then(move |stream| {
+            stream.for_each(move |ev| {
+                println!("{:?}", ev);
+                Ok(())
+            })
+        }))
     }
 }
