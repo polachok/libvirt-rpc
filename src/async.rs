@@ -510,6 +510,18 @@ impl<'a> DomainOperations<'a> {
         let pl = request::DomainGetXmlDescRequest::new(dom, flags);
         Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_GET_XML_DESC, pl).map(|resp| resp.into()))
     }
+
+    /// Configure the domain to be automatically started when the host machine boots.
+    pub fn set_autostart(&self, dom: &request::Domain, enable: bool) -> LibvirtFuture<()> {
+        let pl = request::DomainSetAutoStartRequest::new(dom, enable);
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_SET_AUTOSTART, pl).map(|resp| resp.into()))
+    }
+
+    /// Provides a boolean value indicating whether the domain configured to be automatically started when the host machine boots.
+    pub fn get_autostart(&self, dom: &request::Domain) -> LibvirtFuture<bool> {
+        let pl = request::DomainGetAutoStartRequest::new(dom);
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_GET_AUTOSTART, pl).map(|resp| resp.into()))
+    }
 }
 
 impl Service for Client {
