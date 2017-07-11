@@ -1031,6 +1031,27 @@ req!(DomainDetachDeviceRequest: remote_domain_detach_device_flags_args {
 resp!(DomainDetachDeviceResponse);
 rpc!(DomainDetachDeviceRequest => DomainDetachDeviceResponse);
 
+use generated::remote_domain_get_autostart_args;
+req!(DomainGetAutoStartRequest: remote_domain_get_autostart_args {
+    dom: &Domain => dom.0.clone()
+});
+resp!(DomainGetAutoStartResponse: generated::remote_domain_get_autostart_ret);
+rpc!(DomainGetAutoStartRequest => DomainGetAutoStartResponse);
+
+impl Into<bool> for DomainGetAutoStartResponse {
+    fn into(self) -> bool {
+        (self.0).autostart == 1
+    }
+}
+
+use generated::remote_domain_set_autostart_args;
+req!(DomainSetAutoStartRequest: remote_domain_set_autostart_args {
+    dom: &Domain => dom.0.clone(),
+    autostart: bool => if autostart { 1 } else { 0 }
+});
+resp!(DomainSetAutoStartResponse);
+rpc!(DomainSetAutoStartRequest => DomainSetAutoStartResponse);
+
 use generated::remote_domain_get_xml_desc_args;
 req!(DomainGetXmlDescRequest: remote_domain_get_xml_desc_args {
     dom: &Domain => dom.0.clone(),
