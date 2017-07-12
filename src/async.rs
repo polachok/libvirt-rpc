@@ -516,6 +516,20 @@ impl<'a> DomainOperations<'a> {
         Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_DETACH_DEVICE_FLAGS, pl).map(|resp| resp.into()))
     }
 
+    /// Change a virtual device on a domain, using the flags parameter to control how the device is changed.
+    /// VIR_DOMAIN_AFFECT_CURRENT specifies that the device change is made based on current domain state.
+    /// VIR_DOMAIN_AFFECT_LIVE specifies that the device shall be changed on the active domain instance
+    /// only and is not added to the persisted domain configuration.
+    /// VIR_DOMAIN_AFFECT_CONFIG specifies that the device shall be changed on the persisted domain configuration only.
+    /// Note that the target hypervisor must return an error if unable to satisfy flags.
+    /// E.g. the hypervisor driver will return failure if LIVE is specified but it only supports modifying the persisted device allocation.
+    /// This method is used for actions such changing CDROM/Floppy device media, altering the graphics configuration such as password,
+    /// reconfiguring the NIC device backend connectivity, etc.
+    pub fn update_device(&self, dom: &request::Domain, xml: &str, flags: request::DomainModificationImpact::DomainModificationImpact) -> LibvirtFuture<()> {
+        let pl = request::DomainUpdateDeviceRequest::new(dom, xml, flags);
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_UPDATE_DEVICE_FLAGS, pl).map(|resp| resp.into()))
+    }
+
     /// Provide an XML description of the domain. The description may be reused later to relaunch the domain with virDomainCreateXML().
     /// No security-sensitive data will be included unless @flags contains VIR_DOMAIN_XML_SECURE;
     /// this flag is rejected on read-only connections. If @flags includes VIR_DOMAIN_XML_INACTIVE,
