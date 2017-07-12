@@ -1097,6 +1097,15 @@ req!(DomainDetachDeviceRequest: remote_domain_detach_device_flags_args {
 resp!(DomainDetachDeviceResponse);
 rpc!(DomainDetachDeviceRequest => DomainDetachDeviceResponse);
 
+use generated::remote_domain_update_device_flags_args;
+req!(DomainUpdateDeviceRequest: remote_domain_update_device_flags_args {
+    dom: &Domain => dom.0.clone(),
+    xml: &str => generated::remote_nonnull_string(xml.to_owned()),
+    flags: DomainModificationImpact::DomainModificationImpact => flags.bits()
+});
+resp!(DomainUpdateDeviceResponse);
+rpc!(DomainUpdateDeviceRequest => DomainUpdateDeviceResponse);
+
 use generated::remote_domain_get_autostart_args;
 req!(DomainGetAutoStartRequest: remote_domain_get_autostart_args {
     dom: &Domain => dom.0.clone()
