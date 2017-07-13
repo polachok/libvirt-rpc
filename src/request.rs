@@ -1127,6 +1127,17 @@ req!(DomainSetAutoStartRequest: remote_domain_set_autostart_args {
 resp!(DomainSetAutoStartResponse);
 rpc!(DomainSetAutoStartRequest => DomainSetAutoStartResponse);
 
+use generated::remote_domain_send_key_args;
+req!(DomainSendKeyRequest: remote_domain_send_key_args {
+    dom: &Domain => dom.0.clone(),
+    codeset: u32 => codeset,
+    holdtime: u32 => holdtime,
+    keycodes: Vec<u32> => keycodes,
+    flags: u32 => flags
+});
+resp!(DomainSendKeyResponse);
+rpc!(DomainSendKeyRequest => DomainSendKeyResponse);
+
 use generated::remote_domain_get_xml_desc_args;
 req!(DomainGetXmlDescRequest: remote_domain_get_xml_desc_args {
     dom: &Domain => dom.0.clone(),
