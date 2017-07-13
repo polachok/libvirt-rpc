@@ -553,6 +553,12 @@ impl<'a> DomainOperations<'a> {
         let pl = request::DomainGetAutoStartRequest::new(dom);
         Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_GET_AUTOSTART, pl).map(|resp| resp.into()))
     }
+
+    /// Send key(s) to the guest.
+    pub fn send_key(&self, dom: &request::Domain, codeset: u32, holdtime: u32, keycodes: Vec<u32>) -> LibvirtFuture<()> {
+        let pl = request::DomainSendKeyRequest::new(dom, codeset, holdtime, keycodes, 0);
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_SEND_KEY, pl).map(|resp| resp.into()))
+    }
 }
 
 impl Service for Client {
