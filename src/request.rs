@@ -1184,6 +1184,262 @@ pub mod DomainModificationImpact {
     }
 }
 
+#[allow(non_snake_case)]
+pub mod DomainMigrateFlags {
+    bitflags! {
+        pub flags DomainMigrateFlags: u32 {
+            /// Do not pause the domain during migration. The domain's memory will
+            /// be transferred to the destination host while the domain is running.
+            /// The migration may never converge if the domain is changing its memory
+            /// faster then it can be transferred. The domain can be manually paused
+            /// anytime during migration using virDomainSuspend.
+            const VIR_MIGRATE_LIVE	=	1,
+            /// Tell the source libvirtd to connect directly to the destination host.
+            /// Without this flag the client (e.g., virsh) connects to both hosts and controls the migration process.
+            /// In peer-to-peer mode, the source libvirtd controls the migration by calling the destination daemon directly.
+            const VIR_MIGRATE_PEER2PEER	=	2,
+            /// Tunnel migration data over libvirtd connection. Without this flag the source hypervisor sends migration data
+            /// directly to the destination hypervisor. This flag can only be used when VIR_MIGRATE_PEER2PEER is set as well.
+            /// Note the less-common spelling that we're stuck with: VIR_MIGRATE_TUNNELLED should be VIR_MIGRATE_TUNNELED.
+            const VIR_MIGRATE_TUNNELLED	=	4,
+            /// Define the domain as persistent on the destination host after successful migration.
+            /// If the domain was persistent on the source host and VIR_MIGRATE_UNDEFINE_SOURCE is not used, it will end up persistent on both hosts.
+            const VIR_MIGRATE_PERSIST_DEST	=	8,
+            /// Undefine the domain on the source host once migration successfully finishes.
+            const VIR_MIGRATE_UNDEFINE_SOURCE	=	16,
+            /// Leave the domain suspended on the destination host. virDomainResume (on the virDomainPtr returned by the migration API)
+            /// has to be called explicitly to resume domain's virtual CPUs.
+            const VIR_MIGRATE_PAUSED	=	32,
+            /// Migrate full disk images in addition to domain's memory.
+            /// By default only non-shared non-readonly disk images are transferred.
+            /// The VIR_MIGRATE_PARAM_MIGRATE_DISKS parameter can be used to specify which disks should be migrated.
+            /// This flag and VIR_MIGRATE_NON_SHARED_INC are mutually exclusive.
+            const VIR_MIGRATE_NON_SHARED_DISK	=	64,
+            /// Migrate disk images in addition to domain's memory.
+            /// This is similar to VIR_MIGRATE_NON_SHARED_DISK, but only the top level of each disk's backing chain is copied.
+            /// That is, the rest of the backing chain is expected to be present on the destination and to be exactly the
+            /// same as on the source host. This flag and VIR_MIGRATE_NON_SHARED_DISK are mutually exclusive.
+            const VIR_MIGRATE_NON_SHARED_INC	=	128,
+            /// Protect against domain configuration changes during the migration process.
+            /// This flag is used automatically when both sides support it.
+            /// Explicitly setting this flag will cause migration to fail if either the source or the destination does not support it.
+            const VIR_MIGRATE_CHANGE_PROTECTION	=	256,
+            /// Force migration even if it is considered unsafe.
+            /// In some cases libvirt may refuse to migrate the domain because doing so may lead to potential problems
+            /// such as data corruption, and thus the migration is considered unsafe.
+            /// For a QEMU domain this may happen if the domain uses disks without explicitly setting cache mode to "none".
+            /// Migrating such domains is unsafe unless the disk images are stored on coherent clustered filesystem, such as GFS2 or GPFS.
+            const VIR_MIGRATE_UNSAFE	=	512,
+            /// Migrate a domain definition without starting the domain on the destination and without stopping it on the source host.
+            /// Offline migration requires VIR_MIGRATE_PERSIST_DEST to be set. Offline migration may not copy disk storage or any other
+            /// file based storage (such as UEFI variables).
+            const VIR_MIGRATE_OFFLINE	=	1024,
+            /// Compress migration data. The compression methods can be specified using VIR_MIGRATE_PARAM_COMPRESSION.
+            /// A hypervisor default method will be used if this parameter is omitted.
+            /// Individual compression methods can be tuned via their specific VIR_MIGRATE_PARAM_COMPRESSION_* parameters.
+            const VIR_MIGRATE_COMPRESSED	=	2048,
+            /// Cancel migration if a soft error (such as I/O error) happens during migration.
+            const VIR_MIGRATE_ABORT_ON_ERROR	=	4096,
+            /// Enable algorithms that ensure a live migration will eventually converge.
+            /// This usually means the domain will be slowed down to make sure it does not change its memory faster
+            /// than a hypervisor can transfer the changed memory to the destination host.
+            /// VIR_MIGRATE_PARAM_AUTO_CONVERGE_* parameters can be used to tune the algorithm.
+            const VIR_MIGRATE_AUTO_CONVERGE	=	8192,
+            /// This flag can be used with RDMA migration (i.e., when VIR_MIGRATE_PARAM_URI starts with "rdma://") to
+            /// tell the hypervisor to pin all domain's memory at once before migration starts rather then letting it
+            /// pin memory pages as needed. This means that all memory pages belonging to the domain will be locked in
+            /// host's memory and the host will not be allowed to swap them out.
+            /// For QEMU/KVM this requires hard_limit memory tuning element (in the domain XML) to be used and set to
+            /// the maximum memory configured for the domain plus any memory consumed by the QEMU process itself.
+            /// Beware of setting the memory limit too high (and thus allowing the domain to lock most of the host's memory).
+            /// Doing so may be dangerous to both the domain and the host itself since the host's kernel may run out of memory.
+            const VIR_MIGRATE_RDMA_PIN_ALL	=	16384,
+            /// Setting the VIR_MIGRATE_POSTCOPY flag tells libvirt to enable post-copy migration.
+            /// However, the migration will start normally and virDomainMigrateStartPostCopy needs to be called to switch it into the post-copy mode.
+            /// See virDomainMigrateStartPostCopy for more details.
+            const VIR_MIGRATE_POSTCOPY	=	32768,
+            /// Setting the VIR_MIGRATE_TLS flag will cause the migration to attempt to use the TLS environment configured
+            /// by the hypervisor in order to perform the migration. If incorrectly configured on either source or destination, the migration will fail.
+            const VIR_MIGRATE_TLS	=	65536,
+        }
+    }
+}
+
+use generated::remote_domain_migrate_begin3_params_args;
+req!(MigrateBeginRequest: remote_domain_migrate_begin3_params_args {
+    dom: &Domain => dom.0.clone(),
+    params: Vec<MigrationParam> => params.into_iter().map(|mp| {
+        let tp: TypedParam = mp.into();
+        tp.into()
+    }).collect(),
+    flags: DomainMigrateFlags::DomainMigrateFlags => flags.bits()
+});
+resp!(MigrateBeginResponse: generated::remote_domain_migrate_begin3_params_ret);
+rpc!(MigrateBeginRequest => MigrateBeginResponse);
+
+#[derive(Debug)]
+pub enum MigrationParam {
+    /// URI to use for initiating domain migration. It takes a hypervisor specific format. The
+    /// uri_transports element of the hypervisor capabilities XML includes details
+    /// of the supported URI schemes. When omitted libvirt will auto-generate
+    /// suitable default URI. It is typically only necessary to specify this URI if
+    /// the destination host has multiple interfaces and a specific interface is
+    /// required to transmit migration data.
+    /// 
+    /// This filed may not be used when VIR_MIGRATE_TUNNELLED flag is set.
+    Uri(String),
+    /// the name to be used for the domain on the
+    /// destination host. Omitting this parameter keeps
+    /// the domain name the same. This field is only allowed to be used with
+    /// hypervisors that support domain renaming during migration.
+    DestinationName(String),
+    /// the new configuration to be used for the
+    /// domain on the destination host. The configuration
+    /// must include an identical set of virtual devices, to ensure a stable guest
+    /// ABI across migration. Only parameters related to host side configuration
+    /// can be changed in the XML. Hypervisors which support this field will forbid
+    /// migration if the provided XML would cause a change in the guest ABI. This
+    /// field cannot be used to rename the domain during migration (use
+    /// VIR_MIGRATE_PARAM_DEST_NAME field for that purpose). Domain name in the
+    /// destination XML must match the original domain name.
+    ///
+    /// Omitting this parameter keeps the original domain configuration. Using this
+    /// field with hypervisors that do not support changing domain configuration
+    /// during migration will result in a failure.
+    DestinationXml(String),
+    /// the new persistent configuration to be used
+    /// for the domain on the destination host.
+    /// This field cannot be used to rename the domain during migration (use
+    /// VIR_MIGRATE_PARAM_DEST_NAME field for that purpose). Domain name in the
+    /// destination XML must match the original domain name.
+    ///
+    /// Omitting this parameter keeps the original domain persistent configuration.
+    /// Using this field with hypervisors that do not support changing domain
+    /// configuration during migration will result in a failure.
+    PersistentXml(String),
+    ///   the maximum bandwidth (in MiB/s) that will
+    /// be used for migration. If set to 0 or omitted,
+    /// libvirt will choose a suitable default. Some hypervisors do not support this
+    /// feature and will return an error if this field is used and is not 0.
+    Bandwidth(u64),
+    /// URI to use for migrating client's connection
+    /// to domain's graphical console. If specified, the
+    /// client will be asked to automatically reconnect using these parameters
+    /// instead of the automatically computed ones. This can be useful if, e.g., the
+    /// client does not have a direct access to the network virtualization hosts are
+    /// connected to and needs to connect through a proxy. The URI is formed as
+    /// follows:
+    ///
+    ///      protocol://hostname[:port]/[?parameters]
+    ///
+    /// where protocol is either "spice" or "vnc" and parameters is a list of
+    /// protocol specific parameters separated by '&'. Currently recognized
+    /// parameters are "tlsPort" and "tlsSubject". For example,
+    ///
+    ///      spice://target.host.com:1234/?tlsPort=4567
+    GraphicsUri(String),
+    /// The listen address that hypervisor on the
+    /// destination side should bind to for incoming migration. Both IPv4 and IPv6
+    /// addresses are accepted as well as hostnames (the resolving is done on
+    /// destination). Some hypervisors do not support this feature and will return
+    /// an error if this field is used.
+    ListenAddress(String),
+    /// The multiple values that list
+    /// the block devices to be migrated. At the moment this is only supported
+    /// by the QEMU driver but not for the tunnelled migration.
+    MigrateDisks(String),
+    /// virDomainMigrate* params field: port that destination server should use
+    /// for incoming disks migration. If set to 0 or
+    /// omitted, libvirt will choose a suitable default. At the moment this is only
+    /// supported by the QEMU driver.
+    DisksPort(i32),
+    /// virDomainMigrate* params multiple field: name of the method used to
+    /// compress migration traffic. Supported compression methods: xbzrle, mt.
+    /// The parameter may be specified multiple times if more than one method
+    /// should be used.
+    Compression(String),
+    /// the level of compression for multithread
+    /// compression. Accepted values are in range 0-9.
+    /// 0 is no compression, 1 is maximum speed and 9 is maximum compression.
+    CompressionLevel(i32),
+    /// the number of compression threads for
+    /// multithread compression
+    CompressionThreads(i32),
+    /// the number of decompression threads for
+    /// multithread compression
+    DecompressionThreads(i32),
+    /// the size of page cache for xbzrle compression
+    CompressionXbzrleCache(u64),
+    /// the initial percentage guest CPUs are
+    /// throttled to when auto-convergence decides migration is not converging.
+    AutoConvergeInitial(i32),
+    /// the increment added to
+    /// VIR_MIGRATE_PARAM_AUTO_CONVERGE_INITIAL whenever the hypervisor decides
+    /// the current rate is not enough to ensure convergence of the migration.
+    AutoConvergeIncrement(i32),
+}
+
+impl Into<TypedParam> for MigrationParam {
+    fn into(self) -> TypedParam {
+        match self {
+            MigrationParam::Uri(ref s) => TypedParam::string("migrate_uri", s),
+            MigrationParam::DestinationName(ref s) => TypedParam::string("destination_name", s),
+            MigrationParam::DestinationXml(ref s) => TypedParam::string("destination_xml", s),
+            MigrationParam::PersistentXml(ref s) => TypedParam::string("persistent_xml", s),
+            MigrationParam::Bandwidth(ref i) => TypedParam::ulonglong("bandwidth", *i),
+            MigrationParam::GraphicsUri(ref s) => TypedParam::string("graphics_uri", s),
+            MigrationParam::ListenAddress(ref s) => TypedParam::string("listen_address", s),
+            MigrationParam::MigrateDisks(ref s) => TypedParam::string("migrate_disks", s),
+            MigrationParam::DisksPort(ref i) => TypedParam::int("disks_port", *i),
+            MigrationParam::Compression(ref s) => TypedParam::string("compression", s),
+            MigrationParam::CompressionLevel(ref i) => TypedParam::int("compression.mt.level", *i),
+            MigrationParam::CompressionThreads(ref i) => TypedParam::int("compression.mt.threads", *i),
+            MigrationParam::DecompressionThreads(ref i) => TypedParam::int("compression.mt.dthreads", *i),
+            MigrationParam::CompressionXbzrleCache(ref i) => TypedParam::ulonglong("compression.xbzrle.cache", *i),
+            MigrationParam::AutoConvergeInitial(ref i) => TypedParam::int("auto_converge.initial", *i),
+            MigrationParam::AutoConvergeIncrement(ref i) => TypedParam::int("auto_converge.increment", *i),
+        }
+    }
+}
+
+struct TypedParam(generated::remote_typed_param);
+
+impl TypedParam {
+    fn string(name: &str, value: &str) -> Self {
+        TypedParam(generated::remote_typed_param {
+            field: generated::remote_nonnull_string(name.to_string()),
+            value: generated::remote_typed_param_value::Const7(generated::remote_nonnull_string(value.to_string())),
+        })
+    }
+
+    fn ulonglong(name: &str, value: u64) -> Self {
+        TypedParam(generated::remote_typed_param {
+            field: generated::remote_nonnull_string(name.to_string()),
+            value: generated::remote_typed_param_value::Const4(value),
+        })
+    }
+
+    fn int(name: &str, value: i32) -> Self {
+        TypedParam(generated::remote_typed_param {
+            field: generated::remote_nonnull_string(name.to_string()),
+            value: generated::remote_typed_param_value::Const1(value),
+        })
+    }
+    /* TODO: more */
+}
+
+impl Into<generated::remote_typed_param> for TypedParam {
+    fn into(self) -> generated::remote_typed_param {
+        self.0
+    }
+}
+
+impl From<generated::remote_typed_param> for TypedParam {
+    fn from(p: generated::remote_typed_param) -> Self {
+        TypedParam(p)
+    }
+}
+
 #[derive(Debug)]
 pub struct DomainInfo(DomainGetInfoResponse);
 

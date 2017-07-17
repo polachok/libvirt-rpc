@@ -559,6 +559,13 @@ impl<'a> DomainOperations<'a> {
         let pl = request::DomainSendKeyRequest::new(dom, codeset, holdtime, keycodes, 0);
         Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_SEND_KEY, pl).map(|resp| resp.into()))
     }
+
+    pub fn migrate_begin(&self, dom: &request::Domain, params: Vec<request::MigrationParam>, flags: request::DomainMigrateFlags::DomainMigrateFlags) -> LibvirtFuture<()> {
+        let pl = request::MigrateBeginRequest::new(dom, params, flags);
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_MIGRATE_BEGIN3_PARAMS, pl).map(|resp| {
+            println!("DEBUG RESP: {:?}", resp);
+        }))
+    }
 }
 
 impl Service for Client {
