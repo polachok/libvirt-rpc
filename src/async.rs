@@ -566,6 +566,13 @@ impl<'a> DomainOperations<'a> {
             println!("DEBUG RESP: {:?}", resp);
         }))
     }
+
+    pub fn migrate_perform(&self, dom: &request::Domain, uri: &str, params: Vec<request::MigrationParam>, flags: request::DomainMigrateFlags::DomainMigrateFlags) -> LibvirtFuture<()> {
+        let pl = request::MigratePerformRequest::new(dom, Some(uri), params, vec![], flags);
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_MIGRATE_PERFORM3_PARAMS, pl).map(|resp| {
+            println!("DEBUG RESP: {:?}", resp);
+        }))
+    }
 }
 
 impl Service for Client {

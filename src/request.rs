@@ -1265,6 +1265,20 @@ pub mod DomainMigrateFlags {
     }
 }
 
+use generated::remote_domain_migrate_perform3_params_args;
+req!(MigratePerformRequest: remote_domain_migrate_perform3_params_args {
+    dom: &Domain => dom.0.clone(),
+    dconnuri: Option<&str> => dconnuri.map(|uri| generated::remote_nonnull_string(uri.to_string())),
+    params: Vec<MigrationParam> => params.into_iter().map(|mp| {
+        let tp: TypedParam = mp.into();
+        tp.into()
+    }).collect(),
+    cookie_in: Vec<u8> => cookie_in,
+    flags: DomainMigrateFlags::DomainMigrateFlags => flags.bits()
+});
+resp!(MigratePerformResponse: generated::remote_domain_migrate_perform3_params_ret);
+rpc!(MigratePerformRequest => MigratePerformResponse);
+
 use generated::remote_domain_migrate_begin3_params_args;
 req!(MigrateBeginRequest: remote_domain_migrate_begin3_params_args {
     dom: &Domain => dom.0.clone(),
