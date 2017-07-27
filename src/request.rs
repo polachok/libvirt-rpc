@@ -1342,15 +1342,10 @@ pub enum MigrationParam {
     /// instead of the automatically computed ones. This can be useful if, e.g., the
     /// client does not have a direct access to the network virtualization hosts are
     /// connected to and needs to connect through a proxy. The URI is formed as
-    /// follows:
-    ///
-    ///      protocol://hostname[:port]/[?parameters]
-    ///
+    /// follows: protocol://hostname[:port]/[?parameters]
     /// where protocol is either "spice" or "vnc" and parameters is a list of
     /// protocol specific parameters separated by '&'. Currently recognized
-    /// parameters are "tlsPort" and "tlsSubject". For example,
-    ///
-    ///      spice://target.host.com:1234/?tlsPort=4567
+    /// parameters are "tlsPort" and "tlsSubject". For example, spice://target.host.com:1234/?tlsPort=4567
     GraphicsUri(String),
     /// The listen address that hypervisor on the
     /// destination side should bind to for incoming migration. Both IPv4 and IPv6
