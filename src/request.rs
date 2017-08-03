@@ -1106,6 +1106,15 @@ req!(DomainUpdateDeviceRequest: remote_domain_update_device_flags_args {
 resp!(DomainUpdateDeviceResponse);
 rpc!(DomainUpdateDeviceRequest => DomainUpdateDeviceResponse);
 
+use generated::remote_domain_set_memory_flags_args;
+req!(DomainSetMemoryRequest: remote_domain_set_memory_flags_args {
+    dom: &Domain => dom.0.clone(),
+    memory: u64 => memory,
+    flags: DomainModificationImpact::DomainModificationImpact => flags.bits()
+});
+resp!(DomainSetMemoryResponse);
+rpc!(DomainSetMemoryRequest => DomainSetMemoryResponse);
+
 use generated::remote_domain_get_autostart_args;
 req!(DomainGetAutoStartRequest: remote_domain_get_autostart_args {
     dom: &Domain => dom.0.clone()
@@ -1180,6 +1189,16 @@ pub mod DomainModificationImpact {
 
             /// Affect persistent domain state.
             const AFFECT_CONFIG = 2,
+        }
+    }
+
+    bitflags! {
+        pub flags MemoryModificationImplact: u32 {
+            const MEM_CURRENT = AFFECT_CURRENT as u32,
+
+            const MEM_LIVE = AFFECT_LIVE as u32,
+
+            const MEM_CONFIG = AFFECT_CONFIG as u32,
         }
     }
 }

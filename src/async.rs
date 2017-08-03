@@ -530,6 +530,12 @@ impl<'a> DomainOperations<'a> {
         Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_UPDATE_DEVICE_FLAGS, pl).map(|resp| resp.into()))
     }
 
+    /// Dynamically change the target amount of physical memory allocated to a domain.
+    pub fn set_memory(&self, dom: &request::Domain, size: u64, flags: request::DomainModificationImpact::DomainModificationImpact) -> LibvirtFuture<()> {
+        let pl = request::DomainSetMemoryRequest::new(dom, size, flags);
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_SET_MEMORY_FLAGS, pl).map(|resp| resp.into()))
+    }
+
     /// Provide an XML description of the domain. The description may be reused later to relaunch the domain with virDomainCreateXML().
     /// No security-sensitive data will be included unless @flags contains VIR_DOMAIN_XML_SECURE;
     /// this flag is rejected on read-only connections. If @flags includes VIR_DOMAIN_XML_INACTIVE,
