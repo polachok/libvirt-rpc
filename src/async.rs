@@ -531,9 +531,24 @@ impl<'a> DomainOperations<'a> {
     }
 
     /// Dynamically change the target amount of physical memory allocated to a domain.
-    pub fn set_memory(&self, dom: &request::Domain, size: u64, flags: request::DomainModificationImpact::DomainModificationImpact) -> LibvirtFuture<()> {
+    pub fn set_memory(&self, dom: &request::Domain, size: u64, flags: request::DomainModificationImpact::MemoryModificationImpact) -> LibvirtFuture<()> {
         let pl = request::DomainSetMemoryRequest::new(dom, size, flags);
         Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_SET_MEMORY_FLAGS, pl).map(|resp| resp.into()))
+    }
+
+    pub fn set_vcpus(&self, dom: &request::Domain, count: u32, flags: request::DomainModificationImpact::VcpuModificationImpact) -> LibvirtFuture<()> {
+        let pl = request::DomainSetVcpusRequest::new(dom, count, flags);
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_SET_VCPUS_FLAGS, pl).map(|resp| resp.into()))
+    }
+
+    pub fn get_vcpus(&self, dom: &request::Domain, flags: request::DomainModificationImpact::VcpuModificationImpact) -> LibvirtFuture<u32> {
+        let pl = request::DomainGetVcpusRequest::new(dom, flags);
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_GET_VCPUS_FLAGS, pl).map(|resp| resp.into()))
+    }
+
+    pub fn get_memory_params(&self, dom: &request::Domain, flags: request::DomainModificationImpact::DomainModificationImpact) -> LibvirtFuture<()> {
+        let pl = request::DomainGetMemoryParametersRequest::new(dom, 64 /* random */, flags);
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_GET_MEMORY_PARAMETERS, pl).map(|resp| println!("DEBUG RESP {:?}", resp)))
     }
 
     /// Provide an XML description of the domain. The description may be reused later to relaunch the domain with virDomainCreateXML().

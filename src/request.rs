@@ -1110,10 +1110,52 @@ use generated::remote_domain_set_memory_flags_args;
 req!(DomainSetMemoryRequest: remote_domain_set_memory_flags_args {
     dom: &Domain => dom.0.clone(),
     memory: u64 => memory,
-    flags: DomainModificationImpact::DomainModificationImpact => flags.bits()
+    flags: DomainModificationImpact::MemoryModificationImpact => flags.bits()
 });
 resp!(DomainSetMemoryResponse);
 rpc!(DomainSetMemoryRequest => DomainSetMemoryResponse);
+
+use generated::remote_domain_get_memory_parameters_args;
+req!(DomainGetMemoryParametersRequest: remote_domain_get_memory_parameters_args {
+    dom: &Domain => dom.0.clone(),
+    nparams: u32 => nparams as i32, 
+    flags: DomainModificationImpact::DomainModificationImpact => flags.bits()
+});
+resp!(DomainGetMemoryParametersResponse: generated::remote_domain_get_memory_parameters_ret);
+rpc!(DomainGetMemoryParametersRequest => DomainGetMemoryParametersResponse);
+
+impl DomainGetMemoryParametersResponse {
+    pub fn count(&self) -> u32 {
+        self.0.nparams as u32
+    }
+
+    pub fn parameters(self) -> Vec<TypedParam> {
+        self.0.params.into_iter().map(TypedParam::from).collect()
+    }
+}
+
+use generated::remote_domain_set_vcpus_flags_args;
+req!(DomainSetVcpusRequest: remote_domain_set_vcpus_flags_args {
+    dom: &Domain => dom.0.clone(),
+    nvcpus: u32 => nvcpus,
+    flags: DomainModificationImpact::VcpuModificationImpact => flags.bits()
+});
+resp!(DomainSetVcpusResponse);
+rpc!(DomainSetVcpusRequest => DomainSetVcpusResponse);
+
+use generated::remote_domain_get_vcpus_flags_args;
+req!(DomainGetVcpusRequest: remote_domain_get_vcpus_flags_args {
+    dom: &Domain => dom.0.clone(),
+    flags: DomainModificationImpact::VcpuModificationImpact => flags.bits()
+});
+resp!(DomainGetVcpusResponse: generated::remote_domain_get_vcpus_flags_ret);
+rpc!(DomainGetVcpusRequest => DomainGetVcpusResponse);
+
+impl Into<u32> for DomainGetVcpusResponse {
+    fn into(self) -> u32 {
+        (self.0).num as u32
+    }
+}
 
 use generated::remote_domain_get_autostart_args;
 req!(DomainGetAutoStartRequest: remote_domain_get_autostart_args {
@@ -1193,12 +1235,33 @@ pub mod DomainModificationImpact {
     }
 
     bitflags! {
-        pub flags MemoryModificationImplact: u32 {
-            const MEM_CURRENT = AFFECT_CURRENT as u32,
+        pub flags MemoryModificationImpact: u32 {
+            const MEM_CURRENT = 0, // AFFECT_CURRENT, // as u32,
 
-            const MEM_LIVE = AFFECT_LIVE as u32,
+            const MEM_LIVE = 1, // AFFECT_LIVE as u32,
 
-            const MEM_CONFIG = AFFECT_CONFIG as u32,
+            const MEM_CONFIG = 2, // AFFECT_CONFIG as u32,
+
+            /// affect max. value
+            const MEM_MAXIMUM = 4,
+        }
+    }
+
+    bitflags! {
+        pub flags VcpuModificationImpact: u32 {
+            const VCPU_CURRENT = 0, // AFFECT_CURRENT, // as u32,
+
+            const VCPU_LIVE = 1, // AFFECT_LIVE as u32,
+
+            const VCPU_CONFIG = 2, // AFFECT_CONFIG as u32,
+
+            /// affect max. value
+            const VCPU_MAXIMUM = 4,
+
+            // modify state of the cpu in the guest
+            const VCPU_GUEST = 8,
+
+            const VCPU_HOTPLUGGABLE = 16,
         }
     }
 }
@@ -1430,7 +1493,8 @@ impl Into<TypedParam> for MigrationParam {
     }
 }
 
-struct TypedParam(generated::remote_typed_param);
+#[derive(Debug)]
+pub struct TypedParam(generated::remote_typed_param);
 
 impl TypedParam {
     fn string(name: &str, value: &str) -> Self {
