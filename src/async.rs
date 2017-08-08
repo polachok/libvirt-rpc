@@ -547,7 +547,7 @@ impl<'a> DomainOperations<'a> {
     }
 
     pub fn get_memory_params(&self, dom: &request::Domain, flags: request::DomainModificationImpact::DomainModificationImpact) -> LibvirtFuture<()> {
-        let pl = request::DomainGetMemoryParametersRequest::new(dom, 64 /* random */, flags);
+        let pl = request::DomainGetMemoryParametersRequest::new(dom, 8 /* random */, flags);
         Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_DOMAIN_GET_MEMORY_PARAMETERS, pl).map(|resp| println!("DEBUG RESP {:?}", resp)))
     }
 
