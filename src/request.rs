@@ -1546,6 +1546,14 @@ impl DomainInfo {
     pub fn get_state(&self) -> DomainState {
         DomainState::from((self.0).0.state as u8)
     }
+
+    pub fn get_max_mem(&self) -> u64 {
+        (self.0).0.maxMem
+    }
+
+    pub fn get_num_cpus(&self) -> u32 {
+        (self.0).0.nrVirtCpu as u32
+    }
 }
 
 impl From<DomainGetInfoResponse> for DomainInfo {
