@@ -1115,6 +1115,13 @@ req!(DomainSetMemoryRequest: remote_domain_set_memory_flags_args {
 resp!(DomainSetMemoryResponse);
 rpc!(DomainSetMemoryRequest => DomainSetMemoryResponse);
 
+use generated::remote_domain_get_max_memory_args;
+req!(DomainGetMaxMemoryRequest: remote_domain_get_max_memory_args {
+    dom: &Domain => dom.0.clone()
+});
+resp!(DomainGetMaxMemoryResponse: generated::remote_domain_get_max_memory_ret);
+rpc!(DomainGetMaxMemoryRequest => DomainGetMaxMemoryResponse);
+
 use generated::remote_domain_get_memory_parameters_args;
 req!(DomainGetMemoryParametersRequest: remote_domain_get_memory_parameters_args {
     dom: &Domain => dom.0.clone(),
