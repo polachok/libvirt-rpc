@@ -283,6 +283,12 @@ impl<'a> VolumeOperations<'a> {
                         Client::handle_response(ev.unwrap()).map_err(|e| e.into())
                    }))
     }
+
+    /// Fetches volatile information about the storage volume such as its current allocation
+    pub fn info(&self, vol: &request::Volume) -> LibvirtFuture<request::VolumeInfo> {
+        let pl = request::StorageVolGetInfoRequest::new(vol);
+        Box::new(self.client.request(request::remote_procedure::REMOTE_PROC_STORAGE_VOL_GET_INFO, pl).map(|resp| resp.into()))
+    }
 }
 
 /// Operations on libvirt storage pools

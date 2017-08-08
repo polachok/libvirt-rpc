@@ -1037,6 +1037,32 @@ req!(StorageVolResizeRequest: remote_storage_vol_resize_args {
 resp!(StorageVolResizeResponse);
 rpc!(StorageVolResizeRequest => StorageVolResizeResponse);
 
+use generated::remote_storage_vol_get_info_args;
+req!(StorageVolGetInfoRequest: remote_storage_vol_get_info_args {
+    vol: &Volume => vol.0.clone()
+});
+resp!(StorageVolGetInfoResponse: generated::remote_storage_vol_get_info_ret);
+rpc!(StorageVolGetInfoRequest => StorageVolGetInfoResponse);
+
+impl Into<VolumeInfo> for StorageVolGetInfoResponse {
+    fn into(self) -> VolumeInfo {
+        VolumeInfo(self.0)
+    }
+}
+
+#[derive(Debug)]
+pub struct VolumeInfo(generated::remote_storage_vol_get_info_ret);
+
+impl VolumeInfo {
+    pub fn get_capacity(&self) -> u64 {
+        (self.0).capacity
+    }
+
+    pub fn get_allocation(&self) -> u64 {
+        (self.0).allocation
+    }
+}
+
 use generated::remote_domain_screenshot_args;
 req!(DomainScreenshotRequest: remote_domain_screenshot_args {
     dom: &Domain => dom.0.clone(),
