@@ -1037,6 +1037,32 @@ req!(StorageVolResizeRequest: remote_storage_vol_resize_args {
 resp!(StorageVolResizeResponse);
 rpc!(StorageVolResizeRequest => StorageVolResizeResponse);
 
+use generated::remote_storage_vol_get_info_args;
+req!(StorageVolGetInfoRequest: remote_storage_vol_get_info_args {
+    vol: &Volume => vol.0.clone()
+});
+resp!(StorageVolGetInfoResponse: generated::remote_storage_vol_get_info_ret);
+rpc!(StorageVolGetInfoRequest => StorageVolGetInfoResponse);
+
+impl Into<VolumeInfo> for StorageVolGetInfoResponse {
+    fn into(self) -> VolumeInfo {
+        VolumeInfo(self.0)
+    }
+}
+
+#[derive(Debug)]
+pub struct VolumeInfo(generated::remote_storage_vol_get_info_ret);
+
+impl VolumeInfo {
+    pub fn get_capacity(&self) -> u64 {
+        (self.0).capacity
+    }
+
+    pub fn get_allocation(&self) -> u64 {
+        (self.0).allocation
+    }
+}
+
 use generated::remote_domain_screenshot_args;
 req!(DomainScreenshotRequest: remote_domain_screenshot_args {
     dom: &Domain => dom.0.clone(),
@@ -1105,6 +1131,64 @@ req!(DomainUpdateDeviceRequest: remote_domain_update_device_flags_args {
 });
 resp!(DomainUpdateDeviceResponse);
 rpc!(DomainUpdateDeviceRequest => DomainUpdateDeviceResponse);
+
+use generated::remote_domain_set_memory_flags_args;
+req!(DomainSetMemoryRequest: remote_domain_set_memory_flags_args {
+    dom: &Domain => dom.0.clone(),
+    memory: u64 => memory,
+    flags: DomainModificationImpact::MemoryModificationImpact => flags.bits()
+});
+resp!(DomainSetMemoryResponse);
+rpc!(DomainSetMemoryRequest => DomainSetMemoryResponse);
+
+use generated::remote_domain_get_max_memory_args;
+req!(DomainGetMaxMemoryRequest: remote_domain_get_max_memory_args {
+    dom: &Domain => dom.0.clone()
+});
+resp!(DomainGetMaxMemoryResponse: generated::remote_domain_get_max_memory_ret);
+rpc!(DomainGetMaxMemoryRequest => DomainGetMaxMemoryResponse);
+
+use generated::remote_domain_get_memory_parameters_args;
+req!(DomainGetMemoryParametersRequest: remote_domain_get_memory_parameters_args {
+    dom: &Domain => dom.0.clone(),
+    nparams: u32 => nparams as i32, 
+    flags: DomainModificationImpact::DomainModificationImpact => flags.bits()
+});
+resp!(DomainGetMemoryParametersResponse: generated::remote_domain_get_memory_parameters_ret);
+rpc!(DomainGetMemoryParametersRequest => DomainGetMemoryParametersResponse);
+
+impl DomainGetMemoryParametersResponse {
+    pub fn count(&self) -> u32 {
+        self.0.nparams as u32
+    }
+
+    pub fn parameters(self) -> Vec<TypedParam> {
+        self.0.params.into_iter().map(TypedParam::from).collect()
+    }
+}
+
+use generated::remote_domain_set_vcpus_flags_args;
+req!(DomainSetVcpusRequest: remote_domain_set_vcpus_flags_args {
+    dom: &Domain => dom.0.clone(),
+    nvcpus: u32 => nvcpus,
+    flags: DomainModificationImpact::VcpuModificationImpact => flags.bits()
+});
+resp!(DomainSetVcpusResponse);
+rpc!(DomainSetVcpusRequest => DomainSetVcpusResponse);
+
+use generated::remote_domain_get_vcpus_flags_args;
+req!(DomainGetVcpusRequest: remote_domain_get_vcpus_flags_args {
+    dom: &Domain => dom.0.clone(),
+    flags: DomainModificationImpact::VcpuModificationImpact => flags.bits()
+});
+resp!(DomainGetVcpusResponse: generated::remote_domain_get_vcpus_flags_ret);
+rpc!(DomainGetVcpusRequest => DomainGetVcpusResponse);
+
+impl Into<u32> for DomainGetVcpusResponse {
+    fn into(self) -> u32 {
+        (self.0).num as u32
+    }
+}
 
 use generated::remote_domain_get_autostart_args;
 req!(DomainGetAutoStartRequest: remote_domain_get_autostart_args {
@@ -1180,6 +1264,37 @@ pub mod DomainModificationImpact {
 
             /// Affect persistent domain state.
             const AFFECT_CONFIG = 2,
+        }
+    }
+
+    bitflags! {
+        pub flags MemoryModificationImpact: u32 {
+            const MEM_CURRENT = 0, // AFFECT_CURRENT, // as u32,
+
+            const MEM_LIVE = 1, // AFFECT_LIVE as u32,
+
+            const MEM_CONFIG = 2, // AFFECT_CONFIG as u32,
+
+            /// affect max. value
+            const MEM_MAXIMUM = 4,
+        }
+    }
+
+    bitflags! {
+        pub flags VcpuModificationImpact: u32 {
+            const VCPU_CURRENT = 0, // AFFECT_CURRENT, // as u32,
+
+            const VCPU_LIVE = 1, // AFFECT_LIVE as u32,
+
+            const VCPU_CONFIG = 2, // AFFECT_CONFIG as u32,
+
+            /// affect max. value
+            const VCPU_MAXIMUM = 4,
+
+            // modify state of the cpu in the guest
+            const VCPU_GUEST = 8,
+
+            const VCPU_HOTPLUGGABLE = 16,
         }
     }
 }
@@ -1411,7 +1526,8 @@ impl Into<TypedParam> for MigrationParam {
     }
 }
 
-struct TypedParam(generated::remote_typed_param);
+#[derive(Debug)]
+pub struct TypedParam(generated::remote_typed_param);
 
 impl TypedParam {
     fn string(name: &str, value: &str) -> Self {
@@ -1455,6 +1571,14 @@ pub struct DomainInfo(DomainGetInfoResponse);
 impl DomainInfo {
     pub fn get_state(&self) -> DomainState {
         DomainState::from((self.0).0.state as u8)
+    }
+
+    pub fn get_max_mem(&self) -> u64 {
+        (self.0).0.maxMem
+    }
+
+    pub fn get_num_cpus(&self) -> u32 {
+        (self.0).0.nrVirtCpu as u32
     }
 }
 
