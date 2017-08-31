@@ -96,7 +96,7 @@ macro_rules! delegate_pack_impl {
 macro_rules! delegate_unpack_impl {
     ($t:ty) => {
         impl<In: xdr_codec::Read> xdr_codec::Unpack<In> for $t {
-            fn unpack(mut input: &mut In) -> xdr_codec::Result<(Self, usize)> {
+            fn unpack(input: &mut In) -> xdr_codec::Result<(Self, usize)> {
                 let (inner, len) = try!(xdr_codec::Unpack::unpack(input));
                 let mut pkt: $t = unsafe { ::std::mem::zeroed() };
                 pkt.0 = inner;

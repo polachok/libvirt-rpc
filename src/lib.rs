@@ -35,15 +35,27 @@ pub struct Libvirt<Io: ::std::io::Read+::std::io::Write> {
 /// Represents error 
 #[derive(Debug)]
 pub enum LibvirtError {
+    /// IO error
+    IoError(::std::io::Error),
     /// Error during serialization / deserialization
     XdrError(xdr_codec::Error),
     /// Libvirtd returned error
     Libvirt(request::virNetMessageError),
 }
 
+impl LibvirtError {
+    pub fn is_io(&self) -> bool {
+        if let &LibvirtError::IoError(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
 impl ::std::convert::From<::std::io::Error> for LibvirtError {
     fn from(e: ::std::io::Error) -> Self {
-        LibvirtError::XdrError(e.into())
+        LibvirtError::IoError(e.into())
     }
 }
 
@@ -63,6 +75,7 @@ impl ::std::fmt::Display for LibvirtError {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> std::fmt::Result {
         match self {
            &LibvirtError::XdrError(ref e) => e.fmt(f),
+           &LibvirtError::IoError(ref e) => e.fmt(f),
            &LibvirtError::Libvirt(ref vmsg) => vmsg.fmt(f),
         }
     }
@@ -72,6 +85,7 @@ impl ::std::error::Error for LibvirtError {
     fn description(&self) -> &str {
         match self {
             &LibvirtError::XdrError(ref e) => e.description(),
+            &LibvirtError::IoError(ref e) => e.description(),
             &LibvirtError::Libvirt(ref vmsg) => vmsg.description(),
         }
     }
