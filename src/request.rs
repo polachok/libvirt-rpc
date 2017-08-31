@@ -27,6 +27,7 @@ pub mod generated {
 }
 
 pub trait LibvirtRpc<R: ::std::io::Read> where {
+    const PROCEDURE: ::remote_procedure;
     type Response: Send + ::xdr_codec::Unpack<R>;
 }
 
@@ -231,8 +232,9 @@ macro_rules! resp {
 }
 
 macro_rules! rpc {
-    ($req:ident => $resp:ident) => {
+    ($id:path, $req:ident => $resp:ident) => {
         impl<R: ::std::io::Read> LibvirtRpc<R> for $req {
+            const PROCEDURE: ::remote_procedure = $id;
             type Response = $resp;
         }
     }
@@ -241,7 +243,7 @@ macro_rules! rpc {
 /// Auth list request must be the first request
 req!(AuthListRequest);
 resp!(AuthListResponse: generated::remote_auth_list_ret);
-rpc!(AuthListRequest => AuthListResponse);
+rpc!(remote_procedure::REMOTE_PROC_AUTH_LIST, AuthListRequest => AuthListResponse);
 
 /// Connect open request
 use generated::remote_connect_open_args;
@@ -250,12 +252,12 @@ req!(ConnectOpenRequest: remote_connect_open_args {
      flags => 0
 });
 resp!(ConnectOpenResponse);
-rpc!(ConnectOpenRequest => ConnectOpenResponse);
+rpc!(remote_procedure::REMOTE_PROC_CONNECT_OPEN, ConnectOpenRequest => ConnectOpenResponse);
 
 /// Version request
 req!(GetLibVersionRequest);
 resp!(GetLibVersionResponse: generated::remote_connect_get_lib_version_ret);
-rpc!(GetLibVersionRequest => GetLibVersionResponse);
+rpc!(remote_procedure::REMOTE_PROC_CONNECT_GET_LIB_VERSION, GetLibVersionRequest => GetLibVersionResponse);
 
 impl GetLibVersionResponse {
     pub fn version(&self) -> (u32, u32, u32) {
@@ -271,12 +273,13 @@ impl GetLibVersionResponse {
     }
 }
 
+
 use generated::remote_connect_list_defined_domains_args;
 req!(ListDefinedDomainsRequest: remote_connect_list_defined_domains_args {
     maxnames => generated::REMOTE_DOMAIN_LIST_MAX as i32
 });
 resp!(ListDefinedDomainsResponse: generated::remote_connect_list_defined_domains_ret);
-rpc!(ListDefinedDomainsRequest => ListDefinedDomainsResponse);
+rpc!(remote_procedure::REMOTE_PROC_CONNECT_LIST_DEFINED_DOMAINS, ListDefinedDomainsRequest => ListDefinedDomainsResponse);
 
 impl ListDefinedDomainsResponse {
     pub fn get_domain_names(&self) -> Vec<String> {
@@ -295,7 +298,7 @@ req!(DomainDefineXMLRequest: remote_domain_define_xml_flags_args {
 });
 
 resp!(DomainDefineXMLResponse: generated::remote_domain_define_xml_flags_ret);
-rpc!(DomainDefineXMLRequest => DomainDefineXMLResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_DEFINE_XML_FLAGS, DomainDefineXMLRequest => DomainDefineXMLResponse);
 
 impl ::std::convert::Into<Domain> for DomainDefineXMLResponse {
     fn into(self) -> Domain {
@@ -315,7 +318,7 @@ req!(DomainShutdownRequest: remote_domain_shutdown_args {
 });
 
 resp!(DomainShutdownResponse);
-rpc!(DomainShutdownRequest => DomainShutdownResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_SHUTDOWN, DomainShutdownRequest => DomainShutdownResponse);
 
 use generated::remote_domain_reboot_args;
 req!(DomainRebootRequest: remote_domain_reboot_args {
@@ -324,7 +327,7 @@ req!(DomainRebootRequest: remote_domain_reboot_args {
 });
 
 resp!(DomainRebootResponse);
-rpc!(DomainRebootRequest => DomainRebootResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_REBOOT, DomainRebootRequest => DomainRebootResponse);
 
 use generated::remote_domain_reset_args;
 req!(DomainResetRequest: remote_domain_reset_args {
@@ -333,7 +336,7 @@ req!(DomainResetRequest: remote_domain_reset_args {
 });
 
 resp!(DomainResetResponse);
-rpc!(DomainResetRequest => DomainResetResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_RESET, DomainResetRequest => DomainResetResponse);
 
 use generated::remote_domain_undefine_flags_args;
 req!(DomainUndefineRequest: remote_domain_undefine_flags_args {
@@ -342,7 +345,7 @@ req!(DomainUndefineRequest: remote_domain_undefine_flags_args {
 });
 
 resp!(DomainUndefineResponse);
-rpc!(DomainUndefineRequest => DomainUndefineResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_POOL_UNDEFINE, DomainUndefineRequest => DomainUndefineResponse);
 
 #[allow(non_snake_case)]
 pub mod DomainCreateFlags {
@@ -369,7 +372,7 @@ req!(DomainCreateRequest: remote_domain_create_with_flags_args {
 });
 
 resp!(DomainCreateResponse: generated::remote_domain_create_with_flags_ret);
-rpc!(DomainCreateRequest => DomainCreateResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_CREATE_WITH_FLAGS, DomainCreateRequest => DomainCreateResponse);
 
 impl ::std::convert::Into<Domain> for DomainCreateResponse {
     fn into(self) -> Domain {
@@ -401,7 +404,7 @@ req!(DomainDestroyRequest: remote_domain_destroy_flags_args {
 });
 
 resp!(DomainDestroyResponse);
-rpc!(DomainDestroyRequest => DomainDestroyResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_DESTROY_FLAGS, DomainDestroyRequest => DomainDestroyResponse);
 
 #[allow(non_snake_case)]
 pub mod ListAllDomainsFlags {
@@ -456,9 +459,11 @@ impl ::std::convert::Into<Vec<Domain>> for ListAllDomainsResponse {
 delegate_unpack_impl!(ListAllDomainsResponse);
 
 impl<R: ::std::io::Read> LibvirtRpc<R> for ListAllDomainsRequest {
+    const PROCEDURE: ::remote_procedure = remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_DOMAINS;
     type Response = ListAllDomainsResponse;
 }
 
+/*
 use generated::remote_connect_domain_event_register_any_args;
 req!(DomainEventRegisterAnyRequest: remote_connect_domain_event_register_any_args {
     eventID as event: i32
@@ -466,6 +471,7 @@ req!(DomainEventRegisterAnyRequest: remote_connect_domain_event_register_any_arg
 
 resp!(DomainEventRegisterAnyResponse);
 rpc!(DomainEventRegisterAnyRequest => DomainEventRegisterAnyResponse);
+*/
 
 use generated::remote_connect_domain_event_callback_register_any_args;
 req!(DomainEventCallbackRegisterAnyRequest: remote_connect_domain_event_callback_register_any_args {
@@ -474,7 +480,7 @@ req!(DomainEventCallbackRegisterAnyRequest: remote_connect_domain_event_callback
 });
 
 resp!(DomainEventCallbackRegisterAnyResponse: generated::remote_connect_domain_event_callback_register_any_ret);
-rpc!(DomainEventCallbackRegisterAnyRequest => DomainEventCallbackRegisterAnyResponse);
+rpc!(remote_procedure::REMOTE_PROC_CONNECT_DOMAIN_EVENT_CALLBACK_REGISTER_ANY, DomainEventCallbackRegisterAnyRequest => DomainEventCallbackRegisterAnyResponse);
 
 impl DomainEventCallbackRegisterAnyResponse {
     pub fn callback_id(&self) -> i32 {
@@ -488,7 +494,7 @@ req!(DomainLookupByUuidRequest: remote_domain_lookup_by_uuid_args {
 });
 
 resp!(DomainLookupByUuidResponse: generated::remote_domain_lookup_by_uuid_ret);
-rpc!(DomainLookupByUuidRequest => DomainLookupByUuidResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_LOOKUP_BY_UUID, DomainLookupByUuidRequest => DomainLookupByUuidResponse);
 
 impl DomainLookupByUuidResponse {
     pub fn domain(&self) -> Domain {
@@ -823,7 +829,7 @@ impl Into<Vec<StoragePool>> for ListAllStoragePoolsResponse {
     }
 }
 
-rpc!(ListAllStoragePoolsRequest => ListAllStoragePoolsResponse);
+rpc!(remote_procedure::REMOTE_PROC_CONNECT_LIST_ALL_STORAGE_POOLS, ListAllStoragePoolsRequest => ListAllStoragePoolsResponse);
 
 use generated::remote_storage_pool_define_xml_args;
 req!(StoragePoolDefineXmlRequest: remote_storage_pool_define_xml_args {
@@ -832,7 +838,7 @@ req!(StoragePoolDefineXmlRequest: remote_storage_pool_define_xml_args {
 });
 
 resp!(StoragePoolDefineXmlResponse: generated::remote_storage_pool_define_xml_ret);
-rpc!(StoragePoolDefineXmlRequest => StoragePoolDefineXmlResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_POOL_DEFINE_XML, StoragePoolDefineXmlRequest => StoragePoolDefineXmlResponse);
 
 impl Into<StoragePool> for StoragePoolDefineXmlResponse {
     fn into(self) -> StoragePool {
@@ -846,7 +852,7 @@ req!(StoragePoolLookupByUuidRequest: remote_storage_pool_lookup_by_uuid_args {
 });
 
 resp!(StoragePoolLookupByUuidResponse: generated::remote_storage_pool_lookup_by_uuid_ret);
-rpc!(StoragePoolLookupByUuidRequest => StoragePoolLookupByUuidResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_POOL_LOOKUP_BY_UUID, StoragePoolLookupByUuidRequest => StoragePoolLookupByUuidResponse);
 
 impl Into<StoragePool> for StoragePoolLookupByUuidResponse {
     fn into(self) -> StoragePool {
@@ -860,7 +866,7 @@ req!(StoragePoolLookupByNameRequest: remote_storage_pool_lookup_by_name_args {
 });
 
 resp!(StoragePoolLookupByNameResponse: generated::remote_storage_pool_lookup_by_name_ret);
-rpc!(StoragePoolLookupByNameRequest => StoragePoolLookupByNameResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_POOL_LOOKUP_BY_NAME, StoragePoolLookupByNameRequest => StoragePoolLookupByNameResponse);
 
 impl Into<StoragePool> for StoragePoolLookupByNameResponse {
     fn into(self) -> StoragePool {
@@ -874,21 +880,21 @@ req!(StoragePoolCreateRequest: remote_storage_pool_create_args {
     flags: u32 => flags
 });
 resp!(StoragePoolCreateResponse);
-rpc!(StoragePoolCreateRequest => StoragePoolCreateResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_POOL_CREATE, StoragePoolCreateRequest => StoragePoolCreateResponse);
 
 use generated::remote_storage_pool_destroy_args;
 req!(StoragePoolDestroyRequest: remote_storage_pool_destroy_args {
     pool: &StoragePool => pool.0.clone()
 });
 resp!(StoragePoolDestroyResponse);
-rpc!(StoragePoolDestroyRequest => StoragePoolDestroyResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_POOL_DESTROY, StoragePoolDestroyRequest => StoragePoolDestroyResponse);
 
 use generated::remote_storage_pool_undefine_args;
 req!(StoragePoolUndefineRequest: remote_storage_pool_undefine_args {
     pool: StoragePool => pool.0
 });
 resp!(StoragePoolUndefineResponse);
-rpc!(StoragePoolUndefineRequest => StoragePoolUndefineResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_POOL_UNDEFINE, StoragePoolUndefineRequest => StoragePoolUndefineResponse);
 
 use generated::remote_storage_pool_list_volumes_args;
 req!(StoragePoolListVolumesRequest: remote_storage_pool_list_volumes_args {
@@ -896,7 +902,7 @@ req!(StoragePoolListVolumesRequest: remote_storage_pool_list_volumes_args {
     maxnames: i32 => maxnames
 });
 resp!(StoragePoolListVolumesResponse: generated::remote_storage_pool_list_volumes_ret);
-rpc!(StoragePoolListVolumesRequest => StoragePoolListVolumesResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_POOL_LIST_VOLUMES, StoragePoolListVolumesRequest => StoragePoolListVolumesResponse);
 
 impl Into<Vec<String>> for StoragePoolListVolumesResponse {
     fn into(self) -> Vec<String> {
@@ -934,7 +940,7 @@ req!(StoragePoolListAllVolumesRequest: remote_storage_pool_list_all_volumes_args
     flags: u32 => flags
 });
 resp!(StoragePoolListAllVolumesResponse: generated::remote_storage_pool_list_all_volumes_ret);
-rpc!(StoragePoolListAllVolumesRequest => StoragePoolListAllVolumesResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_POOL_LIST_ALL_VOLUMES, StoragePoolListAllVolumesRequest => StoragePoolListAllVolumesResponse);
 
 impl Into<Vec<Volume>> for StoragePoolListAllVolumesResponse {
     fn into(self) -> Vec<Volume> {
@@ -960,7 +966,7 @@ req!(StorageVolCreateXmlRequest: remote_storage_vol_create_xml_args {
     flags: StorageVolCreateXmlFlags::StorageVolCreateXmlFlags => flags.bits()
 });
 resp!(StorageVolCreateXmlResponse: generated::remote_storage_vol_create_xml_ret);
-rpc!(StorageVolCreateXmlRequest => StorageVolCreateXmlResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_VOL_CREATE_XML, StorageVolCreateXmlRequest => StorageVolCreateXmlResponse);
 
 impl Into<Volume> for StorageVolCreateXmlResponse {
     fn into(self) -> Volume {
@@ -976,7 +982,7 @@ req!(StorageVolCreateXmlFromRequest: remote_storage_vol_create_xml_from_args {
     flags: StorageVolCreateXmlFlags::StorageVolCreateXmlFlags => flags.bits()
 });
 resp!(StorageVolCreateXmlFromResponse: generated::remote_storage_vol_create_xml_from_ret);
-rpc!(StorageVolCreateXmlFromRequest => StorageVolCreateXmlFromResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_VOL_CREATE_XML_FROM, StorageVolCreateXmlFromRequest => StorageVolCreateXmlFromResponse);
 
 impl Into<Volume> for StorageVolCreateXmlFromResponse {
     fn into(self) -> Volume {
@@ -990,7 +996,7 @@ req!(StorageVolDeleteRequest: remote_storage_vol_delete_args {
     flags: u32 => flags
 });
 resp!(StorageVolDeleteResponse);
-rpc!(StorageVolDeleteRequest => StorageVolDeleteResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_VOL_DELETE, StorageVolDeleteRequest => StorageVolDeleteResponse);
 
 use generated::remote_storage_vol_wipe_args;
 req!(StorageVolWipeRequest: remote_storage_vol_wipe_args {
@@ -998,7 +1004,7 @@ req!(StorageVolWipeRequest: remote_storage_vol_wipe_args {
     flags: u32 => flags
 });
 resp!(StorageVolWipeResponse);
-rpc!(StorageVolWipeRequest => StorageVolWipeResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_VOL_WIPE, StorageVolWipeRequest => StorageVolWipeResponse);
 
 use generated::remote_storage_vol_lookup_by_name_args;
 req!(StorageVolLookupByNameRequest: remote_storage_vol_lookup_by_name_args {
@@ -1006,7 +1012,7 @@ req!(StorageVolLookupByNameRequest: remote_storage_vol_lookup_by_name_args {
     name: &str => generated::remote_nonnull_string(name.to_owned())
 });
 resp!(StorageVolLookupByNameResponse: generated::remote_storage_vol_lookup_by_name_ret);
-rpc!(StorageVolLookupByNameRequest => StorageVolLookupByNameResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_VOL_LOOKUP_BY_NAME, StorageVolLookupByNameRequest => StorageVolLookupByNameResponse);
 
 impl Into<Volume> for StorageVolLookupByNameResponse {
     fn into(self) -> Volume {
@@ -1035,14 +1041,14 @@ req!(StorageVolResizeRequest: remote_storage_vol_resize_args {
     flags: StorageVolResizeFlags::StorageVolResizeFlags => flags.bits()
 });
 resp!(StorageVolResizeResponse);
-rpc!(StorageVolResizeRequest => StorageVolResizeResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_VOL_RESIZE, StorageVolResizeRequest => StorageVolResizeResponse);
 
 use generated::remote_storage_vol_get_info_args;
 req!(StorageVolGetInfoRequest: remote_storage_vol_get_info_args {
     vol: &Volume => vol.0.clone()
 });
 resp!(StorageVolGetInfoResponse: generated::remote_storage_vol_get_info_ret);
-rpc!(StorageVolGetInfoRequest => StorageVolGetInfoResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_VOL_GET_INFO, StorageVolGetInfoRequest => StorageVolGetInfoResponse);
 
 impl Into<VolumeInfo> for StorageVolGetInfoResponse {
     fn into(self) -> VolumeInfo {
@@ -1070,7 +1076,7 @@ req!(DomainScreenshotRequest: remote_domain_screenshot_args {
     flags: u32 => flags
 });
 resp!(DomainScreenshotResponse: generated::remote_domain_screenshot_ret);
-rpc!(DomainScreenshotRequest => DomainScreenshotResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_SCREENSHOT, DomainScreenshotRequest => DomainScreenshotResponse);
 
 impl Into<Option<String>> for DomainScreenshotResponse {
     fn into(self) -> Option<String> {
@@ -1086,7 +1092,7 @@ req!(StorageVolDownloadRequest: remote_storage_vol_download_args {
     flags: u32 => flags
 });
 resp!(StorageVolDownloadResponse);
-rpc!(StorageVolDownloadRequest => StorageVolDownloadResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_VOL_DOWNLOAD, StorageVolDownloadRequest => StorageVolDownloadResponse);
 
 use generated::remote_storage_vol_upload_args;
 req!(StorageVolUploadRequest: remote_storage_vol_upload_args {
@@ -1096,14 +1102,14 @@ req!(StorageVolUploadRequest: remote_storage_vol_upload_args {
     flags: u32 => flags
 });
 resp!(StorageVolUploadResponse);
-rpc!(StorageVolUploadRequest => StorageVolUploadResponse);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_VOL_UPLOAD, StorageVolUploadRequest => StorageVolUploadResponse);
 
 use generated::remote_domain_get_info_args;
 req!(DomainGetInfoRequest: remote_domain_get_info_args {
     dom: &Domain => dom.0.clone()
 });
 resp!(DomainGetInfoResponse: generated::remote_domain_get_info_ret);
-rpc!(DomainGetInfoRequest => DomainGetInfoResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_GET_INFO, DomainGetInfoRequest => DomainGetInfoResponse);
 
 use generated::remote_domain_attach_device_flags_args;
 req!(DomainAttachDeviceRequest: remote_domain_attach_device_flags_args {
@@ -1112,7 +1118,7 @@ req!(DomainAttachDeviceRequest: remote_domain_attach_device_flags_args {
     flags: DomainModificationImpact::DomainModificationImpact => flags.bits()
 });
 resp!(DomainAttachDeviceResponse);
-rpc!(DomainAttachDeviceRequest => DomainAttachDeviceResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_ATTACH_DEVICE_FLAGS, DomainAttachDeviceRequest => DomainAttachDeviceResponse);
 
 use generated::remote_domain_detach_device_flags_args;
 req!(DomainDetachDeviceRequest: remote_domain_detach_device_flags_args {
@@ -1121,7 +1127,7 @@ req!(DomainDetachDeviceRequest: remote_domain_detach_device_flags_args {
     flags: DomainModificationImpact::DomainModificationImpact => flags.bits()
 });
 resp!(DomainDetachDeviceResponse);
-rpc!(DomainDetachDeviceRequest => DomainDetachDeviceResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_DETACH_DEVICE_FLAGS, DomainDetachDeviceRequest => DomainDetachDeviceResponse);
 
 use generated::remote_domain_update_device_flags_args;
 req!(DomainUpdateDeviceRequest: remote_domain_update_device_flags_args {
@@ -1130,7 +1136,7 @@ req!(DomainUpdateDeviceRequest: remote_domain_update_device_flags_args {
     flags: DomainModificationImpact::DomainModificationImpact => flags.bits()
 });
 resp!(DomainUpdateDeviceResponse);
-rpc!(DomainUpdateDeviceRequest => DomainUpdateDeviceResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_UPDATE_DEVICE_FLAGS, DomainUpdateDeviceRequest => DomainUpdateDeviceResponse);
 
 use generated::remote_domain_set_memory_flags_args;
 req!(DomainSetMemoryRequest: remote_domain_set_memory_flags_args {
@@ -1139,14 +1145,16 @@ req!(DomainSetMemoryRequest: remote_domain_set_memory_flags_args {
     flags: DomainModificationImpact::MemoryModificationImpact => flags.bits()
 });
 resp!(DomainSetMemoryResponse);
-rpc!(DomainSetMemoryRequest => DomainSetMemoryResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_SET_MEMORY_FLAGS, DomainSetMemoryRequest => DomainSetMemoryResponse);
 
+/*
 use generated::remote_domain_get_max_memory_args;
 req!(DomainGetMaxMemoryRequest: remote_domain_get_max_memory_args {
     dom: &Domain => dom.0.clone()
 });
 resp!(DomainGetMaxMemoryResponse: generated::remote_domain_get_max_memory_ret);
 rpc!(DomainGetMaxMemoryRequest => DomainGetMaxMemoryResponse);
+*/
 
 use generated::remote_domain_get_memory_parameters_args;
 req!(DomainGetMemoryParametersRequest: remote_domain_get_memory_parameters_args {
@@ -1155,7 +1163,7 @@ req!(DomainGetMemoryParametersRequest: remote_domain_get_memory_parameters_args 
     flags: DomainModificationImpact::DomainModificationImpact => flags.bits()
 });
 resp!(DomainGetMemoryParametersResponse: generated::remote_domain_get_memory_parameters_ret);
-rpc!(DomainGetMemoryParametersRequest => DomainGetMemoryParametersResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_GET_MEMORY_PARAMETERS, DomainGetMemoryParametersRequest => DomainGetMemoryParametersResponse);
 
 impl DomainGetMemoryParametersResponse {
     pub fn count(&self) -> u32 {
@@ -1174,7 +1182,7 @@ req!(DomainSetVcpusRequest: remote_domain_set_vcpus_flags_args {
     flags: DomainModificationImpact::VcpuModificationImpact => flags.bits()
 });
 resp!(DomainSetVcpusResponse);
-rpc!(DomainSetVcpusRequest => DomainSetVcpusResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_SET_VCPUS_FLAGS, DomainSetVcpusRequest => DomainSetVcpusResponse);
 
 use generated::remote_domain_get_vcpus_flags_args;
 req!(DomainGetVcpusRequest: remote_domain_get_vcpus_flags_args {
@@ -1182,7 +1190,7 @@ req!(DomainGetVcpusRequest: remote_domain_get_vcpus_flags_args {
     flags: DomainModificationImpact::VcpuModificationImpact => flags.bits()
 });
 resp!(DomainGetVcpusResponse: generated::remote_domain_get_vcpus_flags_ret);
-rpc!(DomainGetVcpusRequest => DomainGetVcpusResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_GET_VCPUS_FLAGS, DomainGetVcpusRequest => DomainGetVcpusResponse);
 
 impl Into<u32> for DomainGetVcpusResponse {
     fn into(self) -> u32 {
@@ -1195,7 +1203,7 @@ req!(DomainGetAutoStartRequest: remote_domain_get_autostart_args {
     dom: &Domain => dom.0.clone()
 });
 resp!(DomainGetAutoStartResponse: generated::remote_domain_get_autostart_ret);
-rpc!(DomainGetAutoStartRequest => DomainGetAutoStartResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_GET_AUTOSTART, DomainGetAutoStartRequest => DomainGetAutoStartResponse);
 
 impl Into<bool> for DomainGetAutoStartResponse {
     fn into(self) -> bool {
@@ -1209,7 +1217,7 @@ req!(DomainSetAutoStartRequest: remote_domain_set_autostart_args {
     autostart: bool => if autostart { 1 } else { 0 }
 });
 resp!(DomainSetAutoStartResponse);
-rpc!(DomainSetAutoStartRequest => DomainSetAutoStartResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_SET_AUTOSTART, DomainSetAutoStartRequest => DomainSetAutoStartResponse);
 
 use generated::remote_domain_send_key_args;
 req!(DomainSendKeyRequest: remote_domain_send_key_args {
@@ -1220,7 +1228,7 @@ req!(DomainSendKeyRequest: remote_domain_send_key_args {
     flags: u32 => flags
 });
 resp!(DomainSendKeyResponse);
-rpc!(DomainSendKeyRequest => DomainSendKeyResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_SEND_KEY, DomainSendKeyRequest => DomainSendKeyResponse);
 
 use generated::remote_domain_get_xml_desc_args;
 req!(DomainGetXmlDescRequest: remote_domain_get_xml_desc_args {
@@ -1228,7 +1236,7 @@ req!(DomainGetXmlDescRequest: remote_domain_get_xml_desc_args {
     flags: DomainXmlFlags::DomainXmlFlags => flags.bits()
 });
 resp!(DomainGetXmlDescResponse: generated::remote_domain_get_xml_desc_ret);
-rpc!(DomainGetXmlDescRequest => DomainGetXmlDescResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_GET_XML_DESC, DomainGetXmlDescRequest => DomainGetXmlDescResponse);
 
 impl Into<String> for DomainGetXmlDescResponse {
     fn into(self) -> String {
@@ -1392,8 +1400,9 @@ req!(MigratePerformRequest: remote_domain_migrate_perform3_params_args {
     flags: DomainMigrateFlags::DomainMigrateFlags => flags.bits()
 });
 resp!(MigratePerformResponse: generated::remote_domain_migrate_perform3_params_ret);
-rpc!(MigratePerformRequest => MigratePerformResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_MIGRATE_PERFORM3_PARAMS, MigratePerformRequest => MigratePerformResponse);
 
+/*
 use generated::remote_domain_migrate_begin3_params_args;
 req!(MigrateBeginRequest: remote_domain_migrate_begin3_params_args {
     dom: &Domain => dom.0.clone(),
@@ -1405,7 +1414,7 @@ req!(MigrateBeginRequest: remote_domain_migrate_begin3_params_args {
 });
 resp!(MigrateBeginResponse: generated::remote_domain_migrate_begin3_params_ret);
 rpc!(MigrateBeginRequest => MigrateBeginResponse);
-
+*/
 #[derive(Debug)]
 pub enum MigrationParam {
     /// URI to use for initiating domain migration. It takes a hypervisor specific format. The
