@@ -155,6 +155,11 @@ impl Client {
         Box::new(self.request(pl).map(|resp| resp.version()))
     }
 
+    pub fn node_info(&self) -> LibvirtFuture<request::NodeInfo> {
+        let pl = request::NodeGetInfoRequest::new();
+        Box::new(self.request(pl).map(|resp| resp.into()))
+    }
+
     pub fn domain(&self) -> DomainOperations {
         DomainOperations{client: self}
     }

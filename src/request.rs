@@ -240,6 +240,33 @@ macro_rules! rpc {
     }
 }
 
+req!(NodeGetInfoRequest);
+resp!(NodeGetInfoResponse: generated::remote_node_get_info_ret);
+rpc!(remote_procedure::REMOTE_PROC_NODE_GET_INFO, NodeGetInfoRequest => NodeGetInfoResponse);
+
+#[derive(Debug)]
+pub struct NodeInfo(NodeGetInfoResponse);
+
+impl From<NodeGetInfoResponse> for NodeInfo {
+    fn from(resp: NodeGetInfoResponse) -> Self {
+        NodeInfo(resp)
+    }
+}
+
+impl NodeInfo {
+    pub fn get_memory(&self) -> u64 {
+        (self.0).0.memory
+    }
+
+    pub fn get_cpus(&self) -> i32 {
+        (self.0).0.cpus
+    }
+
+    pub fn get_cores(&self) -> i32 {
+        (self.0).0.cores
+    }
+}
+
 /// Auth list request must be the first request
 req!(AuthListRequest);
 resp!(AuthListResponse: generated::remote_auth_list_ret);
