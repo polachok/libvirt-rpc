@@ -896,6 +896,36 @@ req!(StoragePoolUndefineRequest: remote_storage_pool_undefine_args {
 resp!(StoragePoolUndefineResponse);
 rpc!(remote_procedure::REMOTE_PROC_STORAGE_POOL_UNDEFINE, StoragePoolUndefineRequest => StoragePoolUndefineResponse);
 
+use generated::remote_storage_pool_get_info_args;
+req!(StoragePoolGetInfoRequest: remote_storage_pool_get_info_args {
+    pool: &StoragePool => pool.0.clone()
+});
+resp!(StoragePoolGetInfoResponse: generated::remote_storage_pool_get_info_ret);
+rpc!(remote_procedure::REMOTE_PROC_STORAGE_POOL_GET_INFO, StoragePoolGetInfoRequest => StoragePoolGetInfoResponse);
+
+#[derive(Debug)]
+pub struct StoragePoolInfo(StoragePoolGetInfoResponse);
+
+impl From<StoragePoolGetInfoResponse> for StoragePoolInfo {
+    fn from(v: StoragePoolGetInfoResponse) -> Self {
+        StoragePoolInfo(v)
+    }
+}
+
+impl StoragePoolInfo {
+    pub fn get_capacity(&self) -> u64 {
+        (self.0).0.capacity
+    }
+
+    pub fn get_allocation(&self) -> u64 {
+        (self.0).0.allocation
+    }
+
+    pub fn get_available(&self) -> u64 {
+        (self.0).0.available
+    }
+}
+
 use generated::remote_storage_pool_list_volumes_args;
 req!(StoragePoolListVolumesRequest: remote_storage_pool_list_volumes_args {
     pool: &StoragePool => pool.0.clone(),

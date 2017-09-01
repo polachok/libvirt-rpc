@@ -350,6 +350,11 @@ impl<'a> PoolOperations<'a> {
         let payload = request::StoragePoolListAllVolumesRequest::new(pool, 1, 0);
         Box::new(self.client.request(payload).map(|resp| resp.into()))
     }
+
+    pub fn info(&self, pool: &request::StoragePool) -> LibvirtFuture<request::StoragePoolInfo> {
+        let payload = request::StoragePoolGetInfoRequest::new(pool);
+        Box::new(self.client.request(payload).map(|resp| resp.into()))
+    }
 }
 
 /// Operations on libvirt domains
