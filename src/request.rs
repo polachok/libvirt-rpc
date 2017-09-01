@@ -345,7 +345,7 @@ req!(DomainUndefineRequest: remote_domain_undefine_flags_args {
 });
 
 resp!(DomainUndefineResponse);
-rpc!(remote_procedure::REMOTE_PROC_STORAGE_POOL_UNDEFINE, DomainUndefineRequest => DomainUndefineResponse);
+rpc!(remote_procedure::REMOTE_PROC_DOMAIN_UNDEFINE, DomainUndefineRequest => DomainUndefineResponse);
 
 #[allow(non_snake_case)]
 pub mod DomainCreateFlags {
