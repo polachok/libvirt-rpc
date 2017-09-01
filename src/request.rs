@@ -258,12 +258,25 @@ impl NodeInfo {
         (self.0).0.memory
     }
 
+    /// the number of active CPUs
     pub fn get_cpus(&self) -> i32 {
         (self.0).0.cpus
     }
 
+    /// number of cores per socket, total number of processors in case of unusual NUMA topology
     pub fn get_cores(&self) -> i32 {
         (self.0).0.cores
+    }
+
+    /// number of CPU sockets per node if nodes > 1, 1 in case of unusual NUMA topology
+    pub fn get_sockets(&self) -> i32 {
+        (self.0).0.sockets
+    }
+
+    /// the number of NUMA cell, 1 for unusual NUMA topologies or uniform memory access;
+    /// check capabilities XML for the actual NUMA topology
+    pub fn get_nodes(&self) -> i32 {
+        (self.0).0.nodes
     }
 }
 
