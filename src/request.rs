@@ -761,6 +761,66 @@ impl From<generated::remote_domain_event_callback_reboot_msg> for DomainRebootEv
     }
 }
 
+#[derive(Debug,Copy,Clone)]
+#[repr(i32)]
+pub enum DomainBlockJobType {
+    Unknown = 0,
+    /// Block pull (virDomainBlockPull, or virDomainBlockRebase without flags), job ends on completion
+    Pull = 1,
+    /// Block Copy (virDomainBlockCopy, or virDomainBlockRebase with flags), job exists as long as mirroring is active
+    Copy = 2,
+    /// Block Commit (virDomainBlockCommit without flags), job ends on completion
+    Commit = 3,
+    /// Active Block Commit (virDomainBlockCommit with flags), job exists as long as sync is active
+    ActiveCommit = 4,
+}
+
+#[derive(Debug,Copy,Clone)]
+#[repr(i32)]
+pub enum DomainBlockJobStatus {
+    Completed = 0,
+    Failed = 1,
+    Canceled = 2,
+    Ready = 3,
+}
+
+#[derive(Debug)]
+pub struct DomainBlockJobInfo {
+    type_: DomainBlockJobType,
+    status: DomainBlockJobStatus,
+}
+
+impl DomainBlockJobInfo {
+    pub fn get_type(&self) -> DomainBlockJobType {
+        self.type_
+    }
+
+    pub fn get_status(&self) -> DomainBlockJobStatus {
+        self.status
+    }
+}
+
+#[derive(Debug)]
+pub struct DomainBlockJobEvent {
+    pub domain: Domain,
+    pub info: DomainBlockJobInfo,
+}
+
+impl From<generated::remote_domain_event_callback_block_job_msg> for DomainBlockJobEvent {
+    fn from(msg: generated::remote_domain_event_callback_block_job_msg) -> Self {
+        let msg = msg.msg;
+        let dom = Domain(msg.dom);
+        let type_ = unsafe { ::std::mem::transmute(msg.type_) };
+        let status = unsafe { ::std::mem::transmute(msg.status) };
+        let info = DomainBlockJobInfo { type_, status };
+        DomainBlockJobEvent { domain: dom, info: info }
+    }
+}
+
+impl DomainEvent for DomainBlockJobEvent {
+    type From = generated::remote_domain_event_callback_block_job_msg;
+}
+
 // http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventID
 #[derive(Debug,Copy,Clone)]
 pub enum DomainEventId {
@@ -798,6 +858,7 @@ impl DomainEventId {
         match *self {
             Lifecycle => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE,
             Reboot => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_REBOOT,
+            BlockJob => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_BLOCK_JOB,
             _ => unimplemented!(), /* sorry */
         }
     }
