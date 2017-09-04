@@ -852,14 +852,35 @@ pub enum DomainEventId {
 }
 
 impl DomainEventId {
-    pub fn get_method(&self) -> remote_procedure {
+    pub fn to_procedure(&self) -> remote_procedure {
         use self::DomainEventId::*;
         use remote_procedure::*;
         match *self {
             Lifecycle => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE,
             Reboot => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_REBOOT,
+            RtcChange => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_RTC_CHANGE,
+            Watchdog => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_WATCHDOG,
+            IoError => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_IO_ERROR,
+            Graphics => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_GRAPHICS,
+            IoErrorReason => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_IO_ERROR_REASON,
+            ControlError => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_CONTROL_ERROR,
             BlockJob => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_BLOCK_JOB,
-            _ => unimplemented!(), /* sorry */
+            DiskChange => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_DISK_CHANGE,
+            TrayChange => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_TRAY_CHANGE,
+            PmWakeup => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_PMWAKEUP,
+            PmSuspend => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_PMSUSPEND,
+            BalloonChange => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_BALLOON_CHANGE,
+            PmSuspendDisk => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_PMSUSPEND_DISK,
+            DeviceRemoved => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_DEVICE_REMOVED,
+            DeviceAdded => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_DEVICE_ADDED,
+            Tunable => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_TUNABLE,
+            AgentLifecycle => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_AGENT_LIFECYCLE,
+            BlockJob2 => REMOTE_PROC_DOMAIN_EVENT_BLOCK_JOB_2,
+            MigrationIteration => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_MIGRATION_ITERATION,
+            JobCompleted => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_JOB_COMPLETED,
+            DeviceRemovalFailed => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_DEVICE_REMOVAL_FAILED,
+            MetadataChanged => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_METADATA_CHANGE,
+            BlockThreshold => REMOTE_PROC_DOMAIN_EVENT_BLOCK_THRESHOLD,
         }
     }
 
@@ -870,7 +891,29 @@ impl DomainEventId {
         match proc_ {
             REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE => Some(Lifecycle),
             REMOTE_PROC_DOMAIN_EVENT_CALLBACK_REBOOT => Some(Reboot),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_RTC_CHANGE => Some(RtcChange),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_WATCHDOG => Some(Watchdog),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_IO_ERROR => Some(IoError),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_GRAPHICS => Some(Graphics),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_IO_ERROR_REASON => Some(IoErrorReason),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_CONTROL_ERROR => Some(ControlError),
             REMOTE_PROC_DOMAIN_EVENT_CALLBACK_BLOCK_JOB => Some(BlockJob),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_DISK_CHANGE => Some(DiskChange),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_TRAY_CHANGE => Some(TrayChange),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_PMWAKEUP => Some(PmWakeup),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_PMSUSPEND => Some(PmSuspend),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_BALLOON_CHANGE => Some(BalloonChange),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_PMSUSPEND_DISK => Some(PmSuspendDisk),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_DEVICE_REMOVED => Some(DeviceRemoved),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_DEVICE_ADDED => Some(DeviceAdded),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_TUNABLE => Some(Tunable),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_AGENT_LIFECYCLE => Some(AgentLifecycle),
+            REMOTE_PROC_DOMAIN_EVENT_BLOCK_JOB_2 => Some(BlockJob2),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_MIGRATION_ITERATION => Some(MigrationIteration),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_JOB_COMPLETED => Some(JobCompleted),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_DEVICE_REMOVAL_FAILED => Some(DeviceRemovalFailed),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_METADATA_CHANGE => Some(MetadataChanged),
+            REMOTE_PROC_DOMAIN_EVENT_BLOCK_THRESHOLD => Some(BlockThreshold),
             /* TODO: add all */
             _ => None,
         }
