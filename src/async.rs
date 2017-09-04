@@ -406,6 +406,10 @@ impl<'a> DomainOperations<'a> {
     pub fn register_reboot_event(&self, dom: Option<&request::Domain>) -> LibvirtFuture<EventStream<request::DomainRebootEvent>> {
         self.register_event(dom, request::DomainEventId::Reboot)
     }
+
+    pub fn register_block_job_event(&self, dom: Option<&request::Domain>) -> LibvirtFuture<EventStream<request::DomainBlockJobEvent>> {
+        self.register_event(dom, request::DomainEventId::BlockJob)
+    }
     /* TODO implement unregister */
 
     /// Launch a defined domain. If the call succeeds the domain moves from the defined to the running domains pools.
