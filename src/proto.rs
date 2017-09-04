@@ -148,18 +148,11 @@ pub struct LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
 
 impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     fn is_event(&self, procedure: request::generated::remote_procedure) -> bool {
-        match procedure {
-            request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE => {
-                true
-            },
-            request::remote_procedure::REMOTE_PROC_DOMAIN_EVENT_CALLBACK_REBOOT => {
-                true
-            },
-            _ => {
-                debug!("not event: procedure {:?}", procedure);
-                false
-            },
+        if request::DomainEventId::from_procedure(procedure).is_some() {
+            return true;
         }
+        debug!("not event: procedure {:?}", procedure);
+        false
     }
 
     fn poll_sinks(&mut self) -> Poll<Option<(RequestId, LibvirtRequest)>, <LibvirtSink as Sink>::SinkError> {
