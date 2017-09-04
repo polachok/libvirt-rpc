@@ -862,6 +862,19 @@ impl DomainEventId {
             _ => unimplemented!(), /* sorry */
         }
     }
+
+    pub fn from_procedure(proc_: remote_procedure) -> Option<Self> {
+        use self::DomainEventId::*;
+        use remote_procedure::*;
+
+        match proc_ {
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE => Some(Lifecycle),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_REBOOT => Some(Reboot),
+            REMOTE_PROC_DOMAIN_EVENT_CALLBACK_BLOCK_JOB => Some(BlockJob),
+            /* TODO: add all */
+            _ => None,
+        }
+    }
 }
 
 // http://libvirt.org/html/libvirt-libvirt-storage.html#virConnectListAllStoragePoolsFlags
