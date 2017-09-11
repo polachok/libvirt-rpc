@@ -388,7 +388,7 @@ impl<'a> DomainOperations<'a> {
     fn register_event<T: request::DomainEvent>(&self, dom: Option<&request::Domain>, event: request::DomainEventId) -> LibvirtFuture<EventStream<T>> {
         let pl = request::DomainEventCallbackRegisterAnyRequest::new(event as i32, dom);
         let (sender, receiver) = ::futures::sync::mpsc::channel(1024);
-        let event_procedure = event.get_method();
+        let event_procedure = event.to_procedure();
         Box::new(self.client.request_stream(pl, Some(sender), Some(event_procedure))
             .map(move |resp| {
                 let id = resp.callback_id();
