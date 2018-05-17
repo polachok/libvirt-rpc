@@ -544,6 +544,7 @@ impl DomainLookupByUuidResponse {
 
 /* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventCrashedDetailType */
 #[derive(Debug)]
+#[repr(u8)]
 pub enum EventCrashedDetailType {
     /// Guest was panicked
     Panicked = 0,
@@ -551,6 +552,7 @@ pub enum EventCrashedDetailType {
 
 /* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventStartedDetailType */
 #[derive(Debug)]
+#[repr(u8)]
 pub enum EventStartedDetailType {
     /// Normal startup from boot
     Booted = 0,
@@ -566,6 +568,7 @@ pub enum EventStartedDetailType {
 
 /* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventStoppedDetailType */
 #[derive(Debug)]
+#[repr(u8)]
 pub enum EventStoppedDetailType {
     /// Normal shutdown
     Shutdown = 0,
@@ -585,6 +588,7 @@ pub enum EventStoppedDetailType {
 
 /* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventSuspendedDetailType */
 #[derive(Debug)]
+#[repr(u8)]
 pub enum EventSuspendedDetailType {
     /// Normal suspend due to admin pause
     Paused = 0,
@@ -608,6 +612,7 @@ pub enum EventSuspendedDetailType {
 
 /* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventResumedDetailType */
 #[derive(Debug)]
+#[repr(u8)]
 pub enum EventResumedDetailType {
     /// Normal resume due to admin unpause
     Unpaused = 0,
@@ -621,6 +626,7 @@ pub enum EventResumedDetailType {
 
 /* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventDefinedDetailType */
 #[derive(Debug)]
+#[repr(u8)]
 pub enum EventDefinedDetailType {
     /// Newly created config file
     Added =	0,
@@ -634,6 +640,7 @@ pub enum EventDefinedDetailType {
 
 /* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventUndefinedDetailType */
 #[derive(Debug)]
+#[repr(u8)]
 pub enum EventUndefinedDetailType {
     /// Deleted the config file
     Removed = 0,
@@ -643,6 +650,7 @@ pub enum EventUndefinedDetailType {
 
 /* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventShutdownDetailType */
 #[derive(Debug)]
+#[repr(u8)]
 pub enum EventShutdownDetailType {
     /// Guest finished shutdown sequence
     Finished = 0, 
@@ -650,6 +658,7 @@ pub enum EventShutdownDetailType {
 
 /* http://libvirt.org/html/libvirt-libvirt-domain.html#virDomainEventPMSuspendedDetailType */
 #[derive(Debug)]
+#[repr(u8)]
 pub enum EventPmSuspendedDetailType {
     /// Guest was PM suspended to memory
     Memory = 0,
