@@ -1,6 +1,6 @@
 [package]
 name = "libvirt-rpc"
-version = "0.1.11"
+version = "0.1.12"
 authors = ["Alexander Polyakov <apolyakov@beget.com>"]
 description = "libvirt protocol implementation and client"
 documentation = "https://docs.rs/libvirt-rpc"
