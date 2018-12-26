@@ -55,7 +55,7 @@ impl Client {
         UnixClient::new(LibvirtProto)
                 .connect(path, handle)
                 .map(|inner| Client {
-                     inner: inner,
+                     inner,
                 })
     }
 
@@ -71,9 +71,9 @@ impl Client {
             writer.into_inner()
         };
         let req = LibvirtRequest {
-            stream: stream,
-            sink: sink,
-            event: event,
+            stream,
+            sink,
+            event,
             header: request::virNetMessageHeader {
                 proc_: procedure as i32,
                 ..Default::default()
@@ -83,7 +83,7 @@ impl Client {
         Ok(req)
     }
 
-    fn handle_response<'a, P: Unpack<Cursor<::bytes::BytesMut>>>(resp: LibvirtResponse) -> Result<P, LibvirtError> {
+    fn handle_response<P: Unpack<Cursor<::bytes::BytesMut>>>(resp: LibvirtResponse) -> Result<P, LibvirtError> {
         let mut reader = Cursor::new(resp.payload);
         if resp.header.status == request::virNetMessageStatus::VIR_NET_OK {
             let (pkt, _) = try!(P::unpack(&mut reader));

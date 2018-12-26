@@ -530,7 +530,7 @@ impl DomainEventCallbackRegisterAnyResponse {
 
 use generated::remote_domain_lookup_by_uuid_args;
 req!(DomainLookupByUuidRequest: remote_domain_lookup_by_uuid_args {
-    uuid: &::uuid::Uuid => generated::remote_uuid(uuid.as_bytes().clone())
+    uuid: &::uuid::Uuid => generated::remote_uuid(*uuid.as_bytes())
 });
 
 resp!(DomainLookupByUuidResponse: generated::remote_domain_lookup_by_uuid_ret);
@@ -822,7 +822,7 @@ impl From<generated::remote_domain_event_callback_block_job_msg> for DomainBlock
         let type_ = unsafe { ::std::mem::transmute(msg.type_) };
         let status = unsafe { ::std::mem::transmute(msg.status) };
         let info = DomainBlockJobInfo { type_, status };
-        DomainBlockJobEvent { domain: dom, info: info }
+        DomainBlockJobEvent { domain: dom, info }
     }
 }
 
@@ -861,10 +861,10 @@ pub enum DomainEventId {
 }
 
 impl DomainEventId {
-    pub fn to_procedure(&self) -> remote_procedure {
+    pub fn to_procedure(self) -> remote_procedure {
         use self::DomainEventId::*;
         use remote_procedure::*;
-        match *self {
+        match self {
             Lifecycle => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_LIFECYCLE,
             Reboot => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_REBOOT,
             RtcChange => REMOTE_PROC_DOMAIN_EVENT_CALLBACK_RTC_CHANGE,
@@ -1014,7 +1014,7 @@ impl Into<StoragePool> for StoragePoolDefineXmlResponse {
 
 use generated::remote_storage_pool_lookup_by_uuid_args;
 req!(StoragePoolLookupByUuidRequest: remote_storage_pool_lookup_by_uuid_args {
-    uuid: &::uuid::Uuid => generated::remote_uuid(uuid.as_bytes().clone())
+    uuid: &::uuid::Uuid => generated::remote_uuid(*uuid.as_bytes())
 });
 
 resp!(StoragePoolLookupByUuidResponse: generated::remote_storage_pool_lookup_by_uuid_ret);

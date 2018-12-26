@@ -45,7 +45,7 @@ pub enum LibvirtError {
 
 impl LibvirtError {
     pub fn is_io(&self) -> bool {
-        if let &LibvirtError::IoError(_) = self {
+        if let LibvirtError::IoError(_) = self {
             true
         } else {
             false
@@ -55,7 +55,7 @@ impl LibvirtError {
 
 impl ::std::convert::From<::std::io::Error> for LibvirtError {
     fn from(e: ::std::io::Error) -> Self {
-        LibvirtError::IoError(e.into())
+        LibvirtError::IoError(e)
     }
 }
 
@@ -73,20 +73,20 @@ impl ::std::convert::From<virNetMessageError> for LibvirtError {
 
 impl ::std::fmt::Display for LibvirtError {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-           &LibvirtError::XdrError(ref e) => e.fmt(f),
-           &LibvirtError::IoError(ref e) => e.fmt(f),
-           &LibvirtError::Libvirt(ref vmsg) => vmsg.fmt(f),
+        match *self {
+           LibvirtError::XdrError(ref e) => e.fmt(f),
+           LibvirtError::IoError(ref e) => e.fmt(f),
+           LibvirtError::Libvirt(ref vmsg) => vmsg.fmt(f),
         }
     }
 }
 
 impl ::std::error::Error for LibvirtError {
     fn description(&self) -> &str {
-        match self {
-            &LibvirtError::XdrError(ref e) => e.description(),
-            &LibvirtError::IoError(ref e) => e.description(),
-            &LibvirtError::Libvirt(ref vmsg) => vmsg.description(),
+        match *self {
+            LibvirtError::XdrError(ref e) => e.description(),
+            LibvirtError::IoError(ref e) => e.description(),
+            LibvirtError::Libvirt(ref vmsg) => vmsg.description(),
         }
     }
 
@@ -114,14 +114,14 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
     pub fn new(stream: Io) -> Self {
         Libvirt {
             serial: 0,
-            stream: stream,
+            stream,
         }
     }
 
     fn serial(&mut self) -> u32 {
         let serial = self.serial;
         self.serial += 1;
-        return serial;
+        serial
     }
 
     fn write_packet<P: xdr_codec::Pack<Cursor<Vec<u8>>>>(&mut self, packet: P) -> xdr_codec::Result<usize> {
@@ -137,7 +137,7 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         };
         let len = sz + 4;
         try!(self.stream.write_u32::<NetworkEndian>(len as u32));
-        try!(self.stream.write(&buf[0..sz]));
+        try!(self.stream.write_all(&buf[0..sz]));
         //println!("LEN = {:?}\n", len);
         Ok(len as usize)
     }
@@ -185,7 +185,7 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
         }
 
         let (err, _) = try!(virNetMessageError::unpack(&mut cur));
-        return Err(LibvirtError::from(err));
+        Err(LibvirtError::from(err))
     }
 
     fn request<Req: xdr_codec::Pack<Cursor<Vec<u8>>>, Resp: xdr_codec::Unpack<Cursor<Vec<u8>>>>(&mut self, packet: Req) -> Result<Resp, LibvirtError> {
@@ -203,7 +203,7 @@ impl<Io> Libvirt<Io> where Io: ::std::io::Read+::std::io::Write {
                 proc_: procedure as i32,
                 ..Default::default()
             },
-            payload: payload,
+            payload,
         }
     }
 
