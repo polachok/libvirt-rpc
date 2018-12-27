@@ -60,8 +60,8 @@ impl codec::Decoder for LibvirtCodec {
         };
         let payload = buf.split_off(hlen);
         Ok(Some((header.serial as RequestId, LibvirtResponse {
-            header: header,
-            payload: payload,
+            header,
+            payload,
         })))
     }
 }
@@ -69,7 +69,7 @@ impl codec::Decoder for LibvirtCodec {
 fn framed_delimited<T, C>(framed: length_delimited::Framed<T>, codec: C) -> FramedTransport<T, C>
     where T: AsyncRead + AsyncWrite, C: codec::Encoder + codec::Decoder
  {
-    FramedTransport{ inner: framed, codec: codec }
+    FramedTransport{ inner: framed, codec }
 }
 
 struct FramedTransport<T, C> where T: AsyncRead + AsyncWrite + 'static {
@@ -171,7 +171,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                                 header: request::virNetMessageHeader {
                                     type_: ::request::generated::virNetMessageType::VIR_NET_STREAM,
                                     status: request::virNetMessageStatus::VIR_NET_CONTINUE,
-                                    proc_: proc_,
+                                    proc_,
                                     ..Default::default()
                                 },
                                 payload: buf,
@@ -191,7 +191,7 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
                         header: request::virNetMessageHeader {
                             type_: ::request::generated::virNetMessageType::VIR_NET_STREAM,
                             status: request::virNetMessageStatus::VIR_NET_OK,
-                            proc_: proc_,
+                            proc_,
                             ..Default::default()
                         },
                         payload: BytesMut::new(),
@@ -231,13 +231,13 @@ impl<T> LibvirtTransport<T> where T: AsyncRead + AsyncWrite + 'static {
     fn process_stream(&mut self, resp: LibvirtResponse) {
         debug!("incoming stream: {:?}", resp.header);
         {
-            let req_id = resp.header.serial as u64;
+            let req_id = u64::from(resp.header.serial);
             let mut remove_stream = false;
 
             if let Some(ref mut stream) = self.streams.get_mut(&req_id) {
                 debug!("found stream for request id {}: {:?}", req_id, resp.header);
                 let sender = stream;
-                if resp.payload.len() != 0 {
+                if !resp.payload.is_empty() {
                     if resp.header.status == request::generated::virNetMessageStatus::VIR_NET_ERROR {
                         debug!("got error from stream, should drop sink");
                         self.sinks.remove(&req_id);
@@ -354,7 +354,7 @@ impl<T> Sink for LibvirtTransport<T> where
 
         {
             debug!("Have {} sinks", self.sinks.len());
-            if !new_sink && self.sinks.len() > 0 {
+            if !new_sink && !self.sinks.is_empty() {
                 return Ok(AsyncSink::NotReady(item));
             }
         }
@@ -446,7 +446,7 @@ pub struct EventStream<E> where E: request::DomainEvent {
 impl<E> EventStream<E> where E: request::DomainEvent {
     pub fn new(inner: ::futures::sync::mpsc::Receiver<LibvirtResponse>,
            handler: fn(LibvirtResponse) -> Result<<E as request::DomainEvent>::From, ::LibvirtError>) -> Self {
-               EventStream { inner: inner, handle_resp: handler }
+               EventStream { inner, handle_resp: handler }
     }
 
 }
@@ -465,7 +465,7 @@ impl<E> Stream for EventStream<E> where E: ::std::fmt::Debug + request::DomainEv
                         debug!("EVENT (CALLBACK) {:?}", msg);
                         Ok(Async::Ready(Some(msg)))
                     },
-                    Err(e) => return Err(e),
+                    Err(e) => Err(e),
                 }
             },
             Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
